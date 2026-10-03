@@ -1,0 +1,937 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Themes
+   The palette names are roles, not literal colours: --ivory is the page,
+   --paper a raised surface, --card the surface above that, --ink the primary
+   text, --contrast a block that deliberately opposes the page (the hero, the
+   footer). Each theme sets those roles once, below, and everything built from
+   them follows. Add colours in pairs: a light value and a dark one.
+
+   Light is the default. Dark arrives either because the reader asked for it
+   (data-theme="dark", written by the theme switch) or because their device
+   prefers it and they have not chosen. `.theme-light` pins a subtree to light:
+   the workspace uses it until its own dark pass is done.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Light */
+  --l-ivory: #f2eee6;
+  --l-paper: #f8f6f1;
+  --l-card: #ffffff;
+  --l-sand: #e4ddd0;
+  --l-stone: #b8b0a2;
+  --l-stone-deep: #6b655a;
+  --l-ink: #0d1119;
+  --l-ink-2: #141925;
+  --l-ink-3: #1f2532;
+  --l-graphite: #3b404b;
+  --l-mist: #a7abb4;
+  --l-brick: #b0502c;
+  --l-brick-bright: #de6a3d;
+  --l-sage: #4f7a58;
+  --l-sage-deep: #3b5f44;
+  --l-amber: #9a6410;
+  --l-slate: #3d5a80;
+  --l-contrast: #0d1119;
+  --l-contrast-2: #141925;
+  --l-on-contrast: #f8f6f1;
+  --l-line: color-mix(in oklab, #0d1119 14%, transparent);
+  --l-line-on-contrast: color-mix(in oklab, #f2eee6 16%, transparent);
+  --l-halo: 0;
+  --l-scheme: light;
+
+  /* Dark: warm-neutral, so the brand's brick and sage still feel at home. */
+  --d-ivory: #12151b;
+  --d-paper: #191d25;
+  --d-card: #1e232c;
+  --d-sand: #262c36;
+  --d-stone: #767d8a;
+  --d-stone-deep: #a2a9b4;
+  --d-ink: #f3f1ec;
+  --d-ink-2: #e8e5de;
+  --d-ink-3: #dedad2;
+  --d-graphite: #cbd0d8;
+  --d-mist: #9aa1ad;
+  --d-brick: #d2653c;
+  --d-brick-bright: #e8815a;
+  --d-sage: #7fb08a;
+  --d-sage-deep: #9ecfa9;
+  --d-amber: #d9a13f;
+  --d-slate: #8aa5cc;
+  /* Deeper than the page, so a "dark" block still reads as its own band. */
+  --d-contrast: #0a0c11;
+  --d-contrast-2: #11151c;
+  --d-on-contrast: #f3f1ec;
+  --d-line: color-mix(in oklab, #f3f1ec 16%, transparent);
+  --d-line-on-contrast: color-mix(in oklab, #f3f1ec 16%, transparent);
+  /* Every surface is dark, so the logo's halo is always lit. */
+  --d-halo: 1;
+  --d-scheme: dark;
+}
+
+/* The roles, in light. `.theme-light` repeats them so a subtree can opt out of dark. */
+:root,
+.theme-light {
+  color-scheme: var(--l-scheme);
+  --ivory: var(--l-ivory);
+  --paper: var(--l-paper);
+  --card: var(--l-card);
+  --sand: var(--l-sand);
+  --stone: var(--l-stone);
+  --stone-deep: var(--l-stone-deep);
+  --ink: var(--l-ink);
+  --ink-2: var(--l-ink-2);
+  --ink-3: var(--l-ink-3);
+  --graphite: var(--l-graphite);
+  --mist: var(--l-mist);
+  --brick: var(--l-brick);
+  --brick-bright: var(--l-brick-bright);
+  --sage: var(--l-sage);
+  --sage-deep: var(--l-sage-deep);
+  --amber: var(--l-amber);
+  --slate: var(--l-slate);
+  --contrast: var(--l-contrast);
+  --contrast-2: var(--l-contrast-2);
+  --on-contrast: var(--l-on-contrast);
+  --line-light: var(--l-line);
+  --line-dark: var(--l-line-on-contrast);
+  --logo-halo: var(--l-halo);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: var(--d-scheme);
+    --ivory: var(--d-ivory);
+    --paper: var(--d-paper);
+    --card: var(--d-card);
+    --sand: var(--d-sand);
+    --stone: var(--d-stone);
+    --stone-deep: var(--d-stone-deep);
+    --ink: var(--d-ink);
+    --ink-2: var(--d-ink-2);
+    --ink-3: var(--d-ink-3);
+    --graphite: var(--d-graphite);
+    --mist: var(--d-mist);
+    --brick: var(--d-brick);
+    --brick-bright: var(--d-brick-bright);
+    --sage: var(--d-sage);
+    --sage-deep: var(--d-sage-deep);
+    --amber: var(--d-amber);
+    --slate: var(--d-slate);
+    --contrast: var(--d-contrast);
+    --contrast-2: var(--d-contrast-2);
+    --on-contrast: var(--d-on-contrast);
+    --line-light: var(--d-line);
+    --line-dark: var(--d-line-on-contrast);
+    --logo-halo: var(--d-halo);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: var(--d-scheme);
+  --ivory: var(--d-ivory);
+  --paper: var(--d-paper);
+  --card: var(--d-card);
+  --sand: var(--d-sand);
+  --stone: var(--d-stone);
+  --stone-deep: var(--d-stone-deep);
+  --ink: var(--d-ink);
+  --ink-2: var(--d-ink-2);
+  --ink-3: var(--d-ink-3);
+  --graphite: var(--d-graphite);
+  --mist: var(--d-mist);
+  --brick: var(--d-brick);
+  --brick-bright: var(--d-brick-bright);
+  --sage: var(--d-sage);
+  --sage-deep: var(--d-sage-deep);
+  --amber: var(--d-amber);
+  --slate: var(--d-slate);
+  --contrast: var(--d-contrast);
+  --contrast-2: var(--d-contrast-2);
+  --on-contrast: var(--d-on-contrast);
+  --line-light: var(--d-line);
+  --line-dark: var(--d-line-on-contrast);
+  --logo-halo: var(--d-halo);
+}
+
+:root {
+  /* The logo's arch: the brand navy, never recoloured by the surface or the theme. */
+  --navy: #0b1c48;
+  --sage-bright: #7fb08a;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Gentler curve for scroll reveals: less of a long, creeping tail. */
+  --ease-smooth: cubic-bezier(0.25, 0.8, 0.35, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --gutter: clamp(1.25rem, 4vw, 4rem);
+  --header-h: 4.5rem;
+}
+
+@theme inline {
+  --color-ivory: var(--ivory);
+  --color-card: var(--card);
+  --color-contrast: var(--contrast);
+  --color-contrast-2: var(--contrast-2);
+  --color-on-contrast: var(--on-contrast);
+  --color-paper: var(--paper);
+  --color-sand: var(--sand);
+  --color-stone: var(--stone);
+  --color-stone-deep: var(--stone-deep);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-graphite: var(--graphite);
+  --color-mist: var(--mist);
+  --color-navy: var(--navy);
+  --color-brick: var(--brick);
+  --color-brick-bright: var(--brick-bright);
+  --color-sage: var(--sage);
+  --color-sage-bright: var(--sage-bright);
+  --color-sage-deep: var(--sage-deep);
+  --color-amber: var(--amber);
+  --color-slate: var(--slate);
+  --color-line-light: var(--line-light);
+  --color-line-dark: var(--line-dark);
+
+  --font-serif: var(--font-instrument-serif), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: var(--font-geist), ui-sans-serif, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --ease-out-expo: var(--ease-out);
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    background: var(--ink);
+    color: var(--ink);
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-padding-top: var(--header-h);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  body {
+    background: var(--ivory);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background: var(--brick);
+    color: var(--paper);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brick-bright);
+    outline-offset: 3px;
+    border-radius: 1px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* ── Layout primitives ──────────────────────────────────────────────────── */
+@utility shell {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+@utility display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  line-height: 0.92;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@utility hairline-t {
+  border-top: 1px solid currentColor;
+  border-top-color: color-mix(in oklab, currentColor 18%, transparent);
+}
+
+@utility hairline-b {
+  border-bottom: 1px solid currentColor;
+  border-bottom-color: color-mix(in oklab, currentColor 18%, transparent);
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* ── Hero entrance (pure CSS so it starts before hydration) ─────────────── */
+@keyframes hero-aperture {
+  from {
+    clip-path: inset(5% 4% 5% 4%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes hero-settle {
+  from {
+    transform: scale(1.09);
+  }
+  to {
+    transform: scale(1.01);
+  }
+}
+@keyframes line-rise {
+  from {
+    transform: translate3d(0, 108%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rule-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes scroll-cue {
+  0% {
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+  45% {
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+  55% {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+  100% {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+}
+
+.hero-aperture {
+  animation: hero-aperture 1s var(--ease-out) both;
+}
+.hero-settle {
+  animation: hero-settle 1.6s var(--ease-out) both;
+}
+.line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em;
+  margin-bottom: -0.06em;
+}
+.line-mask > span {
+  display: block;
+  animation: line-rise 1.05s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.enter-rise {
+  animation: fade-rise 0.95s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.enter-fade {
+  animation: fade-in 1s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.enter-rule {
+  transform-origin: left;
+  animation: rule-draw 1.3s var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.scroll-cue {
+  animation: scroll-cue 2.4s var(--ease-in-out) infinite;
+  animation-delay: 2s;
+}
+
+/* The opening sequence waits for the photograph and the display font, then plays
+   as one piece (see HeroMedia). Without JS nothing is gated and it just runs. */
+.js:not(.hero-ready) .hero-aperture,
+.js:not(.hero-ready) .hero-settle,
+.js:not(.hero-ready) .line-mask > span,
+.js:not(.hero-ready) .enter-rise,
+.js:not(.hero-ready) .enter-fade,
+.js:not(.hero-ready) .enter-rule,
+.js:not(.hero-ready) .scroll-cue {
+  animation-play-state: paused;
+}
+
+/* ── Scroll reveals (activated by MotionController) ─────────────────────── */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 26px, 0);
+  transition:
+    opacity 0.8s var(--ease-smooth),
+    transform 0.95s var(--ease-smooth);
+  transition-delay: var(--d, 0ms);
+}
+.js [data-reveal="fade"] {
+  transform: none;
+}
+.js [data-reveal="lines"] {
+  opacity: 1;
+  transform: none;
+}
+.js [data-reveal="lines"] .line-mask > span {
+  animation: none;
+  transform: translate3d(0, 108%, 0);
+  transition: transform 1.05s var(--ease-smooth);
+  transition-delay: var(--d, 0ms);
+}
+.js [data-reveal="image"] {
+  opacity: 1;
+  transform: none;
+  clip-path: inset(12% 0 0 0);
+  transition: clip-path 1.2s var(--ease-smooth);
+}
+.js [data-reveal="image"] img {
+  transform: scale(1.12);
+  transition: transform 1.6s var(--ease-smooth);
+}
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+.js [data-reveal="lines"].is-in .line-mask > span {
+  transform: none;
+}
+.js [data-reveal="image"].is-in {
+  clip-path: inset(0 0 0 0);
+}
+.js [data-reveal="image"].is-in img {
+  transform: scale(1);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  min-height: 3.25rem;
+  padding-inline: 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 2px;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    color 0.4s var(--ease-smooth),
+    border-color 0.4s var(--ease-smooth),
+    background-color 0.4s var(--ease-smooth);
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.5s var(--ease-smooth);
+}
+.btn:hover::before {
+  transform: scaleY(1);
+}
+.btn .btn-arrow {
+  transition: transform 0.45s var(--ease-smooth);
+}
+.btn:hover .btn-arrow {
+  transform: translateX(4px);
+}
+
+/* The header's Sign up: slimmer and rounder than the page's call-to-action buttons. */
+.btn-compact {
+  min-height: 2.25rem;
+  padding-inline: 1rem;
+  font-size: 0.8125rem;
+  border-radius: 999px;
+}
+@media (min-width: 640px) {
+  .btn-compact {
+    min-height: 2.5rem;
+    padding-inline: 1.25rem;
+    font-size: 0.875rem;
+  }
+}
+ /* Used on photographs and dark blocks: light in both themes. */
+.btn-light {
+  background: var(--on-contrast);
+  color: var(--contrast);
+}
+.btn-light::before {
+  background: color-mix(in oklab, var(--on-contrast) 80%, var(--brick));
+}
+.btn-dark {
+  background: var(--ink);
+  color: var(--paper);
+}
+.btn-dark::before {
+  background: var(--brick);
+}
+.btn-ghost-light {
+  color: var(--on-contrast);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--on-contrast) 38%, transparent);
+}
+.btn-ghost-light::before {
+  background: color-mix(in oklab, var(--on-contrast) 10%, transparent);
+}
+.btn-ghost-dark {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 28%, transparent);
+}
+.btn-ghost-dark::before {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+
+/* Underlined text link with a drawn rule */
+.link-rule {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.45s var(--ease-smooth);
+  padding-bottom: 2px;
+}
+.link-rule:hover,
+.link-rule:focus-visible {
+  background-size: 100% 1px;
+}
+
+/* ── Ecosystem: brick bond with light travelling through the mortar ────── */
+@keyframes mortar-sweep {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(322%, 0, 0);
+  }
+}
+.mortar {
+  background-color: color-mix(in oklab, var(--ink) 11%, var(--ivory));
+}
+/* Sits above the mortar colour and below the bricks, so it shows only in the joints.
+   Transform-only, so it never repaints while it travels. */
+.mortar-light {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  pointer-events: none;
+  background-image: radial-gradient(
+    50% 60% at 50% 50%,
+    var(--brick-bright),
+    color-mix(in oklab, var(--brick-bright) 35%, transparent) 45%,
+    transparent 75%
+  );
+  will-change: transform;
+  animation: mortar-sweep 8s var(--ease-in-out) infinite alternate;
+}
+
+/* ── Future: route line ─────────────────────────────────────────────────── */
+.route-fill {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 2.4s var(--ease-out) 0.2s;
+}
+.is-in .route-fill {
+  transform: scaleX(1);
+}
+@media (max-width: 1023px) {
+  .route-fill {
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+  .is-in .route-fill {
+    transform: scaleY(1);
+  }
+}
+
+/* Neighborhood mock: slow radar ring */
+@keyframes ring-pulse {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+.ring-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-pulse 4s var(--ease-out) infinite;
+}
+
+@keyframes progress-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes progress-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.tab-progress {
+  transform-origin: left;
+  animation-name: progress-x;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@media (min-width: 1024px) {
+  .tab-progress {
+    transform-origin: top;
+    animation-name: progress-y;
+  }
+}
+
+/* ── Reduced motion: keep the page calm and legible ─────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+  }
+  .js [data-reveal],
+  .js [data-reveal="image"],
+  .js [data-reveal="image"] img,
+  .js [data-reveal="lines"] .line-mask > span {
+    opacity: 1;
+    transform: none;
+    clip-path: none;
+  }
+  /* Never hold the opening behind the gate when motion is reduced. */
+  .js:not(.hero-ready) .hero-aperture,
+  .js:not(.hero-ready) .hero-settle,
+  .js:not(.hero-ready) .line-mask > span,
+  .js:not(.hero-ready) .enter-rise,
+  .js:not(.hero-ready) .enter-fade,
+  .js:not(.hero-ready) .enter-rule {
+    animation-play-state: running !important;
+  }
+  .mortar-light,
+  .ring-pulse,
+  .scroll-cue {
+    animation: none !important;
+  }
+  [data-parallax] {
+    transform: none !important;
+  }
+}
+
+/* ── Hero: PG dropdown ──────────────────────────────────────────────────── */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pg-menu {
+  animation: menu-in 0.22s var(--ease-smooth) both;
+}
+
+/* ── Standalone pages: a light entrance that is not tied to the hero gate ── */
+.page-in {
+  animation: fade-rise 0.7s var(--ease-smooth) both;
+}
+
+/* Generic dropdown entrance, shared by menus that are not portalled */
+.menu-in {
+  animation: menu-in 0.2s var(--ease-smooth) both;
+  transform-origin: top right;
+}
+
+/* ── Workspace (admin and agent portals) ───────────────────────────────────
+   Operational, not cinematic: compact controls in the same materials. In the
+   components layer, so utilities such as `hidden` still override them. */
+@layer components {
+  .wbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding-inline: 0.875rem;
+    border-radius: 3px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 0.15s, box-shadow 0.15s, color 0.15s;
+  }
+  .wbtn:disabled,
+  .wbtn[aria-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .wbtn-primary {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .wbtn-primary:hover {
+    background: var(--ink-3);
+  }
+  .wbtn-secondary {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line-light);
+  }
+  .wbtn-secondary:hover {
+    background: var(--paper);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 30%, transparent);
+  }
+  .wbtn-danger {
+    background: var(--brick);
+    color: #fff;
+  }
+  .wbtn-danger:hover {
+    background: color-mix(in oklab, var(--brick) 85%, black);
+  }
+  .wbtn-ghost {
+    color: var(--graphite);
+  }
+  .wbtn-ghost:hover {
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+    color: var(--ink);
+  }
+  .wbtn-sm {
+    height: 1.875rem;
+    padding-inline: 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .winput {
+    display: block;
+    width: 100%;
+    height: 2.25rem;
+    padding-inline: 0.75rem;
+    border: 1px solid var(--line-light);
+    border-radius: 3px;
+    background: var(--card);
+    color: var(--ink);
+    font-size: 0.875rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  textarea.winput {
+    height: auto;
+    min-height: 5.5rem;
+    padding-block: 0.5rem;
+    line-height: 1.5;
+  }
+  select.winput {
+    padding-right: 2rem;
+  }
+  .winput:focus {
+    outline: none;
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brick-bright) 25%, transparent);
+  }
+  .winput[aria-invalid="true"] {
+    border-color: var(--brick);
+  }
+  .winput::placeholder {
+    color: var(--stone);
+  }
+
+  .wcard {
+    background: var(--card);
+    border: 1px solid var(--line-light);
+    border-radius: 4px;
+  }
+
+  .wtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+  .wtable th {
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    padding: 0.625rem 0.875rem;
+    text-align: left;
+    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--stone-deep);
+    border-bottom: 1px solid var(--line-light);
+    white-space: nowrap;
+  }
+  .wtable td {
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--ink) 7%, transparent);
+    vertical-align: middle;
+  }
+  .wtable tbody tr:hover td {
+    background: color-mix(in oklab, var(--paper) 70%, transparent);
+  }
+  .wtable tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+/* ── Logo on dark surfaces ───────────────────────────────────────────────
+   The arch keeps the brand navy everywhere. On a dark surface navy alone would
+   disappear, so the mark lifts itself off the background with a soft halo:
+   `--logo-halo` turns it on, and the logo does the rest. Anything dark enough to
+   carry light text says so here. */
+[data-nav="dark"],
+.surface-dark {
+  --logo-halo: 1;
+}
+
+/* ── Theme switch ────────────────────────────────────────────────────────
+   The knob's position is CSS, not state, so it is right on the first paint:
+   left for light, right for dark, whether dark came from the reader's choice
+   or from their device. In the components layer, so utilities like `hidden`
+   still apply to it. */
+@layer components {
+  .theme-switch {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    color: inherit;
+  }
+  .theme-switch-track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    width: 3.25rem;
+    padding: 0.1875rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 28%, transparent);
+    transition: box-shadow 0.3s var(--ease-smooth);
+  }
+  .theme-switch:hover .theme-switch-track {
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 55%, transparent);
+  }
+  .theme-switch-icon {
+    position: relative;
+    z-index: 1;
+    width: 0.875rem;
+    height: 0.875rem;
+    flex: none;
+    transition: opacity 0.3s var(--ease-smooth);
+  }
+  .theme-switch-sun {
+    opacity: 1;
+  }
+  .theme-switch-moon {
+    opacity: 0.45;
+  }
+  .theme-switch-knob {
+    position: absolute;
+    top: 0.1875rem;
+    left: 0.1875rem;
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, currentColor 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 22%, transparent);
+    transition: transform 0.35s var(--ease-smooth);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .theme-switch-knob {
+      transform: translateX(1.375rem);
+    }
+    :root:not([data-theme="light"]) .theme-switch-sun {
+      opacity: 0.45;
+    }
+    :root:not([data-theme="light"]) .theme-switch-moon {
+      opacity: 1;
+    }
+  }
+  :root[data-theme="dark"] .theme-switch-knob {
+    transform: translateX(1.375rem);
+  }
+  :root[data-theme="dark"] .theme-switch-sun {
+    opacity: 0.45;
+  }
+  :root[data-theme="dark"] .theme-switch-moon {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .theme-switch-knob {
+      transition: none;
+    }
+  }
+}

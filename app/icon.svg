@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <clipPath id="s"><path d="M13 44h74v14c0 18-15 30-37 40C28 88 13 76 13 58z"/></clipPath>
+    <mask id="k" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+      <rect width="100" height="100" fill="#fff"/>
+      <path d="M35 33l15 16L86 8" fill="none" stroke="#000" stroke-width="19"/>
+    </mask>
+  </defs>
+  <g mask="url(#k)">
+    <path d="M17 40V21C33 7 67 7 83 21v19" fill="none" stroke="#0b1c48" stroke-width="7.5"/>
+    <g clip-path="url(#s)" fill="#e2582a">
+      <rect x="13" y="44" width="23" height="11"/><rect x="39" y="44" width="22" height="11"/><rect x="64" y="44" width="23" height="11"/>
+      <rect x="13" y="58" width="11" height="11"/><rect x="27" y="58" width="21.5" height="11"/><rect x="51.5" y="58" width="21.5" height="11"/><rect x="76" y="58" width="11" height="11"/>
+      <rect x="13" y="72" width="23" height="11"/><rect x="39" y="72" width="22" height="11"/><rect x="64" y="72" width="23" height="11"/>
+      <rect x="13" y="86" width="36" height="14"/><rect x="51.5" y="86" width="36" height="14"/>
+    </g>
+  </g>
+  <path d="M35 33l15 16L86 8" fill="none" stroke="#2f9a56" stroke-width="9"/>
+</svg>

@@ -1,0 +1,1 @@
+ALTER TABLE "real_estate"."commercial_attributes" ADD COLUMN "parking_spaces" smallint;
