@@ -6,48 +6,18 @@ import { assertCan } from "@/lib/authz";
 import type { Actor } from "@/lib/authz/actor";
 import { contactScope, leadScope, visitScope } from "@/lib/authz/scope";
 import { type Tx, db } from "@/lib/db";
-import { LEAD_STATUSES, VISIT_STATUSES } from "@/lib/db/schema/crm";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_TRANSITIONS, type LeadStatus, VISIT_ACTIONS, VISIT_STATUSES, type VisitStatus } from "@/lib/crm/terms";
 import { AppError, conflict, invalid, notFound } from "@/lib/errors";
 import { fieldErrorsFrom } from "@/lib/listings/onboarding-schema";
 import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { notify } from "./notifications";
+
+export { LEAD_STATUS_LABELS, LEAD_TRANSITIONS, VISIT_STATUS_LABELS, type LeadStatus, type VisitStatus } from "@/lib/crm/terms";
 import { type Page, pageParams } from "./pagination";
 
 type Row = Record<string, unknown>;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 const likeEscape = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
-
-export type LeadStatus = (typeof LEAD_STATUSES)[number];
-export type VisitStatus = (typeof VISIT_STATUSES)[number];
-
-export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
-  new: "New",
-  contacted: "Contacted",
-  qualified: "Qualified",
-  visit_scheduled: "Visit scheduled",
-  negotiation: "Negotiation",
-  converted: "Converted",
-  lost: "Lost",
-};
-
-/** The pipeline. Converted is final; a lost lead can be reopened. */
-export const LEAD_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[]> = {
-  new: ["contacted", "qualified", "lost"],
-  contacted: ["qualified", "visit_scheduled", "negotiation", "lost"],
-  qualified: ["visit_scheduled", "negotiation", "lost"],
-  visit_scheduled: ["qualified", "negotiation", "lost"],
-  negotiation: ["converted", "lost", "visit_scheduled"],
-  converted: [],
-  lost: ["contacted"],
-};
-
-export const VISIT_STATUS_LABELS: Record<VisitStatus, string> = {
-  requested: "Requested",
-  scheduled: "Scheduled",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  no_show: "No-show",
-};
 
 // ── From the public listing page ─────────────────────────────────────────────
 
@@ -393,12 +363,7 @@ export async function listVisits(
   };
 }
 
-const VISIT_TRANSITIONS: Record<string, { from: VisitStatus[]; to: VisitStatus }> = {
-  schedule: { from: ["requested", "scheduled"], to: "scheduled" },
-  complete: { from: ["scheduled"], to: "completed" },
-  no_show: { from: ["scheduled"], to: "no_show" },
-  cancel: { from: ["requested", "scheduled"], to: "cancelled" },
-};
+const VISIT_TRANSITIONS: Record<string, { from: readonly VisitStatus[]; to: VisitStatus }> = VISIT_ACTIONS;
 
 export async function updateVisit(actor: Actor, referenceId: string, raw: { action?: unknown; scheduledAt?: unknown; notes?: unknown }) {
   const def = typeof raw.action === "string" ? VISIT_TRANSITIONS[raw.action] : undefined;

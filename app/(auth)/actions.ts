@@ -10,6 +10,7 @@ import { loadWorkspaces } from "@/lib/authz/actor";
 import { env } from "@/lib/env";
 import { type Field, type FormState, PENDING_EMAIL_COOKIE } from "@/lib/auth/form";
 import { ACCOUNT_INTENTS } from "@/lib/intents";
+import { PLANS_PROMO_COOKIE } from "@/lib/subscriptions/terms";
 
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -175,6 +176,8 @@ export async function signInAction(_prev: FormState, form: FormData): Promise<Fo
 
   // Without an explicit destination: agents and staff land in their workspace, customers on their profile.
   const fallback = userId && (await loadWorkspaces(userId)).length > 0 ? "/dashboard" : "/account/profile";
+  // Ask the next page to show the plans pop-up once. It decides what (if anything) to show.
+  (await cookies()).set(PLANS_PROMO_COOKIE, "1", { path: "/", maxAge: 60 * 10, sameSite: "lax", secure: env.NODE_ENV === "production" });
   redirect(safeRedirectPath(form.get("next"), fallback));
 }
 

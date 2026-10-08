@@ -14,6 +14,7 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 
 const TYPES = [
   { key: "listing_review", label: "Listings", permission: "listings.approve" },
+  { key: "tour_review", label: "Virtual tours", permission: "listings.approve" },
   { key: "agent_application", label: "Agent applications", permission: "agents.verify" },
   { key: "organization_verification", label: "Organizations", permission: "organizations.verify" },
 ] as const;
@@ -28,7 +29,9 @@ export default async function ModerationPage({ searchParams }: Props) {
   const filters = { ...parsed, type };
   const page = parsePage(params.page);
   const [result, counts] = await Promise.all([listCases(actor, filters, page), queueCounts(actor, type)]);
-  const queues: Queue[] = type === "listing_review" ? (Object.keys(QUEUES) as Queue[]) : ["pending", "in_review", "rejected", "recent"];
+  const queues: Queue[] =
+    type === "listing_review" ? (Object.keys(QUEUES) as Queue[]) : type === "tour_review" ? ["pending", "rejected", "recent"] : ["pending", "in_review", "rejected", "recent"];
+  const queueLabel = (q: Queue) => (type === "tour_review" && q === "pending" ? "Waiting for a check" : type === "tour_review" && q === "rejected" ? "Hidden" : QUEUES[q]);
 
   return (
     <>
@@ -46,14 +49,14 @@ export default async function ModerationPage({ searchParams }: Props) {
             aria-current={filters.queue === q ? "page" : undefined}
             className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[0.8125rem] ${filters.queue === q ? "border-ink bg-ink text-paper" : "border-line-light bg-card text-graphite hover:border-ink/40"}`}
           >
-            {QUEUES[q]}
+            {queueLabel(q)}
             <span className="tabular-nums opacity-75">{counts[q]}</span>
           </Link>
         ))}
       </div>
       <Card padded={false}>
         <DataTable
-          caption={`${QUEUES[filters.queue]} cases`}
+          caption={`${queueLabel(filters.queue)} cases`}
           rows={result.rows}
           rowKey={(r) => r.referenceId}
           empty={<EmptyState title="Nothing in this queue">When something is submitted it appears here, and the people who can decide it are notified.</EmptyState>}
@@ -80,7 +83,9 @@ export default async function ModerationPage({ searchParams }: Props) {
                   {r.duplicates > 0 && <span className="rounded-full bg-amber/12 px-2 py-0.5 text-amber">{r.duplicates} possible duplicate{r.duplicates > 1 ? "s" : ""}</span>}
                   {r.qualityFlags > 0 && <span className="rounded-full bg-ink/6 px-2 py-0.5 text-graphite">{r.qualityFlags} quality note{r.qualityFlags > 1 ? "s" : ""}</span>}
                   {r.openReports > 0 && <span className="rounded-full bg-brick/10 px-2 py-0.5 text-brick">{r.openReports} report{r.openReports > 1 ? "s" : ""}</span>}
-                  {r.duplicates + r.qualityFlags + r.openReports === 0 && <span className="text-stone-deep">None</span>}
+                  {r.tourChanges > 0 && <span className="rounded-full bg-slate/10 px-2 py-0.5 whitespace-nowrap text-slate">{r.tourChanges} change{r.tourChanges > 1 ? "s" : ""}{r.tourHidden || r.status === "rejected" ? "" : ", live now"}</span>}
+                  {r.tourHidden && ["open", "in_review"].includes(r.status) && <span className="rounded-full bg-brick/10 px-2 py-0.5 whitespace-nowrap text-brick">Tour hidden: fix to check</span>}
+                  {r.duplicates + r.qualityFlags + r.openReports + r.tourChanges === 0 && <span className="text-stone-deep">None</span>}
                 </div>
               ),
               hideBelow: "md",

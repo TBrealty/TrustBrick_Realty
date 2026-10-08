@@ -188,7 +188,7 @@ async function PlatformView({ actor, range, excludeSample }: { actor: Actor; ran
           Waiting for a decision
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Listings pending review" value={t.openCases.listing} href="/approvals" emphasis hint={`${t.pendingListings} submitted or in review`} />
+          <StatCard label="Listings pending review" value={t.openCases.listing} href="/approvals" emphasis hint={`${t.pendingListings} submitted or in review${t.openCases.tour ? ` · ${plural(t.openCases.tour, "tour change", "tour changes")} to check` : ""}`} />
           <StatCard label="Agent applications" value={t.openCases.agent} href="/approvals?type=agent_application" emphasis hint={plural(t.pendingAgents, "agent", "agents") + " pending"} />
           <StatCard label="Organizations to verify" value={t.openCases.organization} href="/approvals?type=organization_verification" emphasis hint={`${t.pendingOrganizations} pending`} />
           <StatCard label="Open reports" value={t.openReports} href="/reports" emphasis hint={plural(t.reportedListings, "listing", "listings") + " reported"} />

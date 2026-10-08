@@ -72,7 +72,7 @@ export type PlatformDashboard = {
     openLeads: number;
     visits: number;
     upcomingVisits: number;
-    openCases: { listing: number; agent: number; organization: number };
+    openCases: { listing: number; agent: number; organization: number; tour: number };
   };
   period: Record<"users" | "agents" | "organizations" | "properties" | "listings" | "published" | "leads" | "visits", Comparison>;
   fixedPeriods: { propertiesToday: number; propertiesThisWeek: number; propertiesThisMonth: number; usersToday: number; usersThisWeek: number; usersThisMonth: number };
@@ -165,7 +165,8 @@ export async function platformDashboard(actor: Actor, range: DateRange, options:
     db.execute(sql`
       SELECT count(*) FILTER (WHERE case_type = 'listing_review') AS listing,
              count(*) FILTER (WHERE case_type = 'agent_application') AS agent,
-             count(*) FILTER (WHERE case_type = 'organization_verification') AS organization
+             count(*) FILTER (WHERE case_type = 'organization_verification') AS organization,
+             count(*) FILTER (WHERE case_type = 'tour_review') AS tour
         FROM trust.review_cases WHERE status IN ('open', 'in_review')`),
     db.execute(sql`
       SELECT (SELECT count(*) FROM real_estate.properties p WHERE p.deleted_at IS NULL AND ${pSample} AND p.created_at >= ${todayStart}) AS p_today,
@@ -263,7 +264,7 @@ export async function platformDashboard(actor: Actor, range: DateRange, options:
       openLeads: n(c.open_leads),
       visits: n(c.visits),
       upcomingVisits: n(c.upcoming),
-      openCases: { listing: n(k.listing), agent: n(k.agent), organization: n(k.organization) },
+      openCases: { listing: n(k.listing), agent: n(k.agent), organization: n(k.organization), tour: n(k.tour) },
     },
     period: {
       users: { current: n(u.cur), previous: n(u.prev) },

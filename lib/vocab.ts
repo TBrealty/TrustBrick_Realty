@@ -89,3 +89,20 @@ export const COMMISSION_COLLECTION = ["invoice", "gateway"] as const;
 /** How a sale or rental listing was closed, when the agent marks it sold or rented out. */
 export const CLOSE_OUTCOMES = ["closed_deal", "closed_elsewhere", "off_market"] as const;
 export type CloseOutcome = (typeof CLOSE_OUTCOMES)[number];
+
+// ── Subscriptions ──────────────────────────────────────────────────────────────
+/** Who a plan is for: a person using Trustbrick, or a partner organization (agents, brokerages, hosts). */
+export const PLAN_AUDIENCES = ["customer", "partner"] as const;
+export type PlanAudience = (typeof PLAN_AUDIENCES)[number];
+export const BILLING_CYCLES = ["monthly", "yearly"] as const;
+export type BillingCycle = (typeof BILLING_CYCLES)[number];
+/**
+ * trialing: on a free trial. pending_payment: a paid plan chosen, waiting for the first payment.
+ * active: paid up to current_period_end. paused: switched off for now by the team; the time it's
+ * paused is added back on resume. cancelled: ended by the subscriber. revoked: ended by the team.
+ * expired: a trial or a paid period ran out. Past-due is worked out from the dates, not stored.
+ */
+export const SUBSCRIPTION_STATUSES = ["trialing", "pending_payment", "active", "paused", "cancelled", "revoked", "expired"] as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+/** Statuses that hold the subscriber's one live subscription. */
+export const LIVE_SUBSCRIPTION_STATUSES = ["trialing", "pending_payment", "active", "paused"] as const;

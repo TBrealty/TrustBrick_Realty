@@ -183,6 +183,11 @@ export function SiteHeader() {
                 <ServicesMenu />
               </li>
               <li>
+                <Link href="/plans" className="link-rule opacity-85 transition-opacity duration-500 hover:opacity-100">
+                  Plans
+                </Link>
+              </li>
+              <li>
                 <Link href={links.about} className="link-rule opacity-85 transition-opacity duration-500 hover:opacity-100">
                   About
                 </Link>
@@ -278,7 +283,7 @@ export function SiteHeader() {
           <ul
             className={`mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[0.9375rem] text-mist transition-opacity delay-300 duration-700 ${open ? "opacity-100" : "opacity-0"}`}
           >
-            {[{ label: "About", href: links.about }, { label: "Contact us", href: links.contact }, ...FOR_OWNERS].map((item) => (
+            {[{ label: "Plans", href: "/plans" }, { label: "About", href: links.about }, { label: "Contact us", href: links.contact }, ...FOR_OWNERS].map((item) => (
               <li key={item.label}>
                 <Link href={item.href} onClick={() => close(false)} className="link-rule hover:text-on-contrast">
                   {item.label}

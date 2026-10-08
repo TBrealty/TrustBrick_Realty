@@ -201,6 +201,24 @@ function Overview({ data }: { data: ListingCardData }) {
         <p className="rounded-[3px] bg-paper px-3 py-2.5 text-[0.8125rem] text-stone-deep">No photos yet.</p>
       )}
 
+      <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[3px] px-3 py-2.5 text-[0.8125rem] ${data.tour?.hiddenAt ? "border-l-2 border-brick bg-brick/6" : "bg-paper"}`}>
+        <p className="min-w-0">
+          <span className="font-medium text-ink">Virtual tour: </span>
+          {data.tour ? (
+            <>
+              {data.tour.summary}
+              {data.tour.hiddenAt && <span className="text-brick"> · hidden by Trustbrick{data.tour.hidden ? `: “${data.tour.hidden}”` : ""}</span>}
+              {data.tour.reviewWaiting && <span className="text-amber"> · a change is waiting for a check</span>}
+            </>
+          ) : (
+            <span className="text-stone-deep">none yet</span>
+          )}
+        </p>
+        <Link href={data.tour ? data.tour.href : `/properties/${data.referenceId}/tour`} className="wbtn wbtn-secondary wbtn-sm">
+          {data.tour ? "Open the tour" : "Tour page"}
+        </Link>
+      </div>
+
       {(data.statusReason || data.offer) && (
         <div className="mt-4 space-y-2">
           {data.statusReason && (

@@ -11,6 +11,8 @@ import { can } from "./index";
 
 /** Which workspace the user last chose. Only a hint: validated against live memberships on every request. */
 export const WORKSPACE_COOKIE = "tb_ws";
+/** The same hint from the mobile app, which sends it as a header (a membership ID). */
+export const WORKSPACE_HEADER = "x-trustbrick-workspace";
 
 export type WorkspaceContext =
   | { state: "anonymous" }
@@ -27,7 +29,7 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext> => 
   const workspaces = await loadWorkspaces(userId);
   if (workspaces.length === 0) return { state: "customer", userId, workspaces: [] };
 
-  const hint = (await cookies()).get(WORKSPACE_COOKIE)?.value;
+  const hint = (await headers()).get(WORKSPACE_HEADER) ?? (await cookies()).get(WORKSPACE_COOKIE)?.value;
   const chosen = workspaces.find((w) => w.membershipId === hint) ?? (workspaces.length === 1 ? workspaces[0] : undefined);
   if (!chosen) return { state: "choose", userId, workspaces };
 

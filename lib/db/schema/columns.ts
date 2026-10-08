@@ -35,7 +35,7 @@ export const referenceId = (prefix: ReferencePrefix) =>
     .default(sql.raw(`platform.gen_reference_id('${prefix}')`));
 
 export const REFERENCE_PREFIXES = [
-  "USR", "AGT", "ADM", "SADM", "ORG", "PRP", "LST", "PROJ", "LEAD", "VIS", "VER", "RPT", "INV", "CON", "DOC", "MSG", "TXN", "HST", "BKG", "TKT", "LGL", "COM",
+  "USR", "AGT", "ADM", "SADM", "ORG", "PRP", "LST", "PROJ", "LEAD", "VIS", "VER", "RPT", "INV", "CON", "DOC", "MSG", "TXN", "HST", "BKG", "TKT", "LGL", "COM", "SUB",
 ] as const;
 export type ReferencePrefix = (typeof REFERENCE_PREFIXES)[number];
 

@@ -15,7 +15,8 @@ export const trust = pgSchema("trust");
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`"${column}" IN (${values.map((v) => `'${v}'`).join(", ")})`);
 
-export const CASE_TYPES = ["listing_review", "agent_application", "organization_verification"] as const;
+/** `tour_review`: a change to the virtual tour of a live listing, which shows straight away and is reviewed after. */
+export const CASE_TYPES = ["listing_review", "agent_application", "organization_verification", "tour_review"] as const;
 export const CASE_STATUSES = ["open", "in_review", "approved", "rejected", "changes_requested", "withdrawn"] as const;
 export const REPORT_REASONS = ["fraud", "incorrect_details", "duplicate", "unavailable", "offensive", "other"] as const;
 export const REPORT_STATUSES = ["open", "actioned", "dismissed"] as const;
@@ -23,6 +24,8 @@ export const REPORT_STATUSES = ["open", "actioned", "dismissed"] as const;
 export type CaseFlags = {
   duplicates?: { referenceId: string; title: string; reasons: string[] }[];
   quality?: { code: string; message: string }[];
+  /** Tour reviews: each change since the case opened, oldest first. */
+  tour?: { changes: { at: string; by: string | null; what: string }[] };
 };
 
 export const reviewCases = trust.table(
@@ -48,8 +51,8 @@ export const reviewCases = trust.table(
     check("review_cases_one_subject_check", sql`num_nonnulls("listing_id", "agent_profile_id", "organization_id") = 1`),
     check("review_cases_type_check", inList("case_type", CASE_TYPES)),
     check("review_cases_status_check", inList("status", CASE_STATUSES)),
-    // At most one open case per subject.
-    uniqueIndex("review_cases_open_listing_idx").on(t.listingId).where(sql`"status" IN ('open', 'in_review')`),
+    // At most one open case per subject (for a listing, one of each type: its review and its tour's).
+    uniqueIndex("review_cases_open_listing_idx").on(t.listingId, t.caseType).where(sql`"status" IN ('open', 'in_review')`),
     uniqueIndex("review_cases_open_agent_idx").on(t.agentProfileId).where(sql`"status" IN ('open', 'in_review')`),
     uniqueIndex("review_cases_open_org_idx").on(t.organizationId).where(sql`"status" IN ('open', 'in_review')`),
     index("review_cases_type_status_created_idx").on(t.caseType, t.status, t.createdAt),

@@ -26,7 +26,7 @@ export type Queue = keyof typeof QUEUES;
 
 export const moderationFilters = z.object({
   queue: z.enum(Object.keys(QUEUES) as [Queue, ...Queue[]]).catch("pending"),
-  type: z.enum(["listing_review", "agent_application", "organization_verification"]).catch("listing_review"),
+  type: z.enum(["listing_review", "tour_review", "agent_application", "organization_verification"]).catch("listing_review"),
 });
 
 export type CaseRow = {
@@ -38,6 +38,10 @@ export type CaseRow = {
   assignedTo: string | null;
   duplicates: number;
   qualityFlags: number;
+  /** Tour reviews: how many changes it covers. */
+  tourChanges: number;
+  /** Tour reviews: the tour is hidden now, so these changes aren't showing until approved. */
+  tourHidden: boolean;
   openReports: number;
   createdAt: string;
   decidedAt: string | null;
@@ -68,6 +72,7 @@ function queueCondition(queue: Queue): SQL {
 const FROM = sql`
   FROM trust.review_cases rc
   LEFT JOIN marketplace.listings l ON l.id = rc.listing_id
+  LEFT JOIN real_estate.properties prop ON prop.id = l.property_id
   LEFT JOIN orgs.agent_profiles ap ON ap.id = rc.agent_profile_id
   LEFT JOIN identity.users apu ON apu.id = ap.user_id
   LEFT JOIN orgs.organizations o ON o.id = rc.organization_id
@@ -76,7 +81,7 @@ const FROM = sql`
 
 const COLUMNS = sql`
   rc.reference_id, rc.case_type, rc.status, rc.flags, rc.created_at, rc.decided_at, sb.name AS submitted_by, asg.name AS assigned_to,
-  l.reference_id AS listing_ref, l.title AS listing_title, l.status AS listing_status,
+  l.reference_id AS listing_ref, l.title AS listing_title, l.status AS listing_status, prop.tour_hidden_at IS NOT NULL AS tour_hidden,
   ap.reference_id AS agent_ref, apu.name AS agent_name, ap.status AS agent_status,
   o.reference_id AS org_ref, o.name AS org_name, o.status AS org_status,
   (SELECT count(*) FROM trust.reports rp WHERE rp.listing_id = rc.listing_id AND rp.status = 'open')::int AS open_reports`;
@@ -97,6 +102,8 @@ function toCaseRow(r: Row): CaseRow {
     assignedTo: (r.assigned_to as string) ?? null,
     duplicates: flags.duplicates?.length ?? 0,
     qualityFlags: flags.quality?.length ?? 0,
+    tourChanges: flags.tour?.changes.length ?? 0,
+    tourHidden: String(r.case_type) === "tour_review" && Boolean(r.tour_hidden),
     openReports: Number(r.open_reports),
     createdAt: iso(r.created_at)!,
     decidedAt: iso(r.decided_at),
@@ -106,6 +113,7 @@ function toCaseRow(r: Row): CaseRow {
 /** The permission a case type needs, so each queue is visible only to the people who can act on it. */
 const CASE_PERMISSION = {
   listing_review: "listings.approve",
+  tour_review: "listings.approve",
   agent_application: "agents.verify",
   organization_verification: "organizations.verify",
 } as const;

@@ -74,6 +74,9 @@ export const PERMISSIONS = {
   "commission.view": { domain: "commission", description: "See commission rates and charges", platform: false },
   "commission.manage": { domain: "commission", description: "Set partners' commission rates, record payments, waive charges and add adjustments", platform: true },
 
+  "subscriptions.view": { domain: "subscriptions", description: "See subscriptions, plans and subscription revenue", platform: true },
+  "subscriptions.manage": { domain: "subscriptions", description: "Record subscription payments, extend trials, change, grant and cancel subscriptions", platform: true },
+
   "support.view": { domain: "support", description: "Read Contact us messages and legal verification requests", platform: true },
   "support.manage": { domain: "support", description: "Resolve Contact us messages and move legal verification requests along", platform: true },
 
@@ -158,6 +161,7 @@ export const ADMIN_PRESETS = {
       "support.manage",
       "conversations.view",
       "commission.view",
+      "subscriptions.view",
     ],
   },
 } as const satisfies Record<string, { label: string; description: string; permissions: readonly Permission[] }>;

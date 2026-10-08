@@ -153,6 +153,8 @@ export type ListingFilters = {
   furnishing: string[];
   status?: "ready" | "under_construction";
   availableNow?: boolean;
+  /** Has a 360° tour or a 3D view. */
+  tour?: boolean;
   /** Carpet area, for homes. Only applies while a home type is chosen. */
   sqftMin?: number;
   sqftMax?: number;
@@ -248,6 +250,7 @@ export function parseFilters(kind: ListingKind, params: RawSearchParams): Listin
     }
   }
   if (kind === "rent") filters.availableNow = flag("available_now");
+  filters.tour = flag("tour");
   if (kind === "pg") {
     filters.gender = oneOf(first(params.gender), ["men", "women", "any"] as const);
     filters.occupancy = manyOf(all(params.occupancy), OCCUPANCY_OPTIONS.map((o) => o.value));
@@ -298,6 +301,7 @@ export function activeFilterCount(filters: ListingFilters): number {
     filters.furnishing.length +
     Number(Boolean(filters.status)) +
     Number(Boolean(filters.availableNow)) +
+    Number(Boolean(filters.tour)) +
     Number(Boolean(filters.sqftMin || filters.sqftMax)) +
     Number(Boolean(filters.sqydMin || filters.sqydMax)) +
     Number(Boolean(filters.gender)) +

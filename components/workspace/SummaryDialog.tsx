@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
 import { loadSummaryAction } from "@/app/(workspace)/summary-actions";
 import { formatCount, formatDateTime } from "@/lib/format";
-import type { AgentSummary, Journey, ListingBrief, OrganizationSummary, Summary, SummaryKind, UserSummary } from "@/lib/services/summaries";
+import { PersonSubscriptionsList } from "@/components/subscriptions/PersonSubscriptionsCard";
+import type { AgentSummary, HostSummary, Journey, ListingBrief, OrganizationSummary, Summary, SummaryKind, UserSummary } from "@/lib/services/summaries";
+import type { PersonSubscriptions } from "@/lib/services/subscriptions";
 import { ReferenceId } from "./ReferenceId";
 import { Status, When } from "./ui";
 
@@ -24,14 +26,16 @@ export function ViewSummary({ kind, referenceId, name }: { kind: SummaryKind; re
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const open = () => {
-    dialogRef.current?.showModal();
-    setError(null);
+  const load = () =>
     startTransition(async () => {
       const result = await loadSummaryAction(kind, referenceId);
       if (result.ok && result.data) setData(result.data);
       else setError(result.ok ? "Nothing to show." : result.message);
     });
+  const open = () => {
+    dialogRef.current?.showModal();
+    setError(null);
+    load();
   };
 
   return (
@@ -52,7 +56,7 @@ export function ViewSummary({ kind, referenceId, name }: { kind: SummaryKind; re
         <div className="flex max-h-[min(90svh,56rem)] flex-col">
           <header className="flex items-start justify-between gap-4 border-b border-line-light px-5 py-4 sm:px-6">
             <div className="min-w-0">
-              <p className="text-[0.6875rem] font-medium tracking-[0.12em] text-stone-deep uppercase">{{ user: "User", agent: "Agent", organization: "Organization" }[kind]}</p>
+              <p className="text-[0.6875rem] font-medium tracking-[0.12em] text-stone-deep uppercase">{{ user: "User", agent: "Agent", organization: "Organization", host: "Host" }[kind]}</p>
               <h2 id={titleId} className="mt-0.5 truncate text-[1.25rem] font-semibold tracking-[-0.01em]">
                 {data?.name ?? name}
               </h2>
@@ -80,15 +84,19 @@ export function ViewSummary({ kind, referenceId, name }: { kind: SummaryKind; re
             ) : !data || data.referenceId !== referenceId ? (
               <Loading />
             ) : data.kind === "user" ? (
-              <UserCard data={data} />
+              <UserCard data={data} onChanged={load} />
             ) : data.kind === "agent" ? (
-              <AgentCard data={data} />
+              <AgentCard data={data} onChanged={load} />
+            ) : data.kind === "host" ? (
+              <HostCard data={data} onChanged={load} />
             ) : (
               <OrganizationCard data={data} />
             )}
           </div>
           <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line-light px-5 py-3 sm:px-6">
-            <p className="text-[0.75rem] text-stone-deep">{pending && data ? "Refreshing…" : "Read-only summary. Actions are on the full page."}</p>
+            <p className="text-[0.75rem] text-stone-deep">
+              {pending && data ? "Refreshing…" : (data?.kind === "user" || data?.kind === "agent" || data?.kind === "host") && data.canManageSubscriptions ? "Subscriptions can be paused or revoked here; other actions are on the full page." : "Read-only summary. Actions are on the full page."}
+            </p>
             <div className="flex gap-2">
               <button type="button" className="wbtn wbtn-secondary wbtn-sm" onClick={() => dialogRef.current?.close()}>
                 Close
@@ -221,10 +229,12 @@ const Restricted = ({ what }: { what: string }) => <p className="text-[0.8125rem
 
 // ── Users ───────────────────────────────────────────────────────────────────
 
-function UserCard({ data }: { data: UserSummary }) {
+function UserCard({ data, onChanged }: { data: UserSummary; onChanged: () => void }) {
   const active = JOURNEYS.filter((j) => data.byJourney[j].enquiries > 0);
   return (
     <>
+      {data.subscriptions && <SubscriptionsSection subs={data.subscriptions} canManage={data.canManageSubscriptions} onChanged={onChanged} />}
+
       <Section title="Contact and account">
         <Facts
           items={[
@@ -442,9 +452,11 @@ function WorkSections({ data, who }: { data: AgentSummary | OrganizationSummary;
   );
 }
 
-function AgentCard({ data }: { data: AgentSummary }) {
+function AgentCard({ data, onChanged }: { data: AgentSummary; onChanged: () => void }) {
   return (
     <>
+      {data.subscriptions && <SubscriptionsSection subs={data.subscriptions} canManage={data.canManageSubscriptions} onChanged={onChanged} />}
+
       <Section title="Profile">
         <Facts
           items={[
@@ -510,6 +522,67 @@ function OrganizationCard({ data }: { data: OrganizationSummary }) {
           <Rows empty="" rows={data.projects.map((p) => ({ key: p.referenceId, main: <span className="font-medium">{p.name}</span>, status: <Status value={p.status} />, meta: <ReferenceId value={p.referenceId} copy={false} /> }))} />
         </Section>
       )}
+    </>
+  );
+}
+
+/** Whether they're subscribed, with Pause and Revoke for their own plan. */
+function SubscriptionsSection({ subs, canManage, onChanged }: { subs: PersonSubscriptions; canManage: boolean; onChanged: () => void }) {
+  const subscribed = subs.personal !== null || subs.organizations.some((o) => o.subscription);
+  return (
+    <Section title="Subscription" hint={subscribed ? undefined : "Not subscribed"}>
+      <PersonSubscriptionsList subs={subs} canManage={canManage} onChanged={onChanged} />
+    </Section>
+  );
+}
+
+const RELATIONSHIP: Record<string, string> = { owner: "Owns the home", family: "Family member of the owner", manager: "Manages it for the owner" };
+
+function HostCard({ data, onChanged }: { data: HostSummary; onChanged: () => void }) {
+  return (
+    <>
+      {data.subscriptions && <SubscriptionsSection subs={data.subscriptions} canManage={data.canManageSubscriptions} onChanged={onChanged} />}
+
+      <Section title="Profile">
+        <Facts
+          items={[
+            ["Email", data.email],
+            ["Phone", data.phone],
+            ["City", data.city],
+            ["Relationship to the home", RELATIONSHIP[data.relationship] ?? data.relationship],
+            ["Languages", data.languages.length ? data.languages.join(", ") : null],
+            ["Applied", formatDateTime(data.appliedAt)],
+            ["Approved", data.approvedAt ? formatDateTime(data.approvedAt) : null],
+            ["Status", <Status key="st" value={data.status} label={data.statusReason ? `${data.status.replace(/^\w/, (c) => c.toUpperCase())}: ${data.statusReason}` : undefined} />],
+          ]}
+        />
+        {data.about && <p className="mt-3 text-[0.8125rem] leading-relaxed whitespace-pre-line text-graphite">{data.about}</p>}
+      </Section>
+
+      <Section title="Hosting">
+        <Tiles
+          items={[
+            { label: "Live stays", value: data.liveStays },
+            { label: "All stays", value: data.stays },
+            { label: "Bookings", value: data.bookings },
+          ]}
+        />
+      </Section>
+
+      <Section title="Stays" hint={data.listings.length ? undefined : "None listed yet"}>
+        {data.listings.length > 0 && (
+          <ul className="divide-y divide-line-light text-[0.8125rem]">
+            {data.listings.map((l) => (
+              <li key={l.referenceId} className="flex items-center justify-between gap-2 py-2">
+                <Link href={`/properties/${l.referenceId}`} className="min-w-0 truncate hover:underline">
+                  {l.title}
+                </Link>
+                <Status value={l.status} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
     </>
   );
 }

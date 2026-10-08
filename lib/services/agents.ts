@@ -13,6 +13,7 @@ import { HOLD_REASONS, pauseListings, resumeListings } from "./listings/lifecycl
 import { notify, notifyPermissionHolders } from "./notifications";
 import { type Page, pageParams } from "./pagination";
 import { getSetting } from "./settings";
+import { SUBSCRIPTION_FILTER, ownPlanColumn, subscriptionFilterSql } from "./subscriptions";
 
 type Row = Record<string, unknown>;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
@@ -116,6 +117,7 @@ export const agentFilters = z.object({
   status: z.enum(["pending", "active", "suspended", "rejected"]).optional().catch(undefined),
   verification: z.enum(["unverified", "pending", "verified", "rejected"]).optional().catch(undefined),
   sort: z.enum(["newest", "oldest", "name", "listings"]).catch("newest"),
+  subscription: SUBSCRIPTION_FILTER,
 });
 export type AgentFilters = z.infer<typeof agentFilters>;
 
@@ -133,6 +135,8 @@ export type AgentRow = {
   leads: number;
   createdAt: string;
   lastActiveAt: string | null;
+  /** Their own live subscription (theirs, or their own organization's), for staff who can see subscriptions. */
+  plan: { name: string; status: string } | null;
 };
 
 /** Broker admins see their own organization's agents (org scope); platform staff see everyone. */
@@ -146,6 +150,10 @@ export async function listAgents(actor: Actor, filters: AgentFilters, page: numb
   const where: SQL[] = [agentScope(actor)];
   if (filters.status) where.push(sql`ap.status = ${filters.status}`);
   if (filters.verification) where.push(sql`ap.verification_status = ${filters.verification}`);
+  // Subscriptions are the platform's business: only staff who can see them filter or see them.
+  const seesPlans = can(actor, "subscriptions.view", "platform");
+  const bySubscription = seesPlans ? subscriptionFilterSql(filters.subscription, sql`u.id`) : null;
+  if (bySubscription) where.push(bySubscription);
   if (filters.q) {
     const ref = normalizeReferenceId(filters.q);
     const like = `%${likeEscape(filters.q)}%`;
@@ -166,7 +174,8 @@ export async function listAgents(actor: Actor, filters: AgentFilters, page: numb
              org.name AS organization, org.reference_id AS organization_reference_id,
              (SELECT count(*) FROM marketplace.listing_agents la WHERE la.agent_user_id = u.id AND la.ended_at IS NULL)::int AS listings,
              (SELECT count(*) FROM crm.leads ld WHERE ld.agent_user_id = u.id AND ld.deleted_at IS NULL)::int AS leads,
-             (SELECT max(s.updated_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_active_at
+             (SELECT max(s.updated_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_active_at,
+             ${seesPlans ? ownPlanColumn(sql`u.id`) : sql`NULL AS own_plan`}
         FROM orgs.agent_profiles ap
         JOIN identity.users u ON u.id = ap.user_id
         LEFT JOIN LATERAL (
@@ -196,6 +205,7 @@ export async function listAgents(actor: Actor, filters: AgentFilters, page: numb
       leads: Number(r.leads),
       createdAt: iso(r.created_at)!,
       lastActiveAt: iso(r.last_active_at),
+      plan: (r.own_plan as { name: string; status: string } | null) ?? null,
     })),
     total: Number((count.rows[0] as Row).total),
     page,

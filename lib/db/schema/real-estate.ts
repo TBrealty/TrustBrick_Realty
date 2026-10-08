@@ -10,6 +10,7 @@ import {
   smallint,
   jsonb,
   text,
+  timestamp,
   unique,
   uniqueIndex,
   uuid,
@@ -120,6 +121,11 @@ export const properties = realEstate.table(
     unitNumber: text("unit_number"),
     /** Amenities the agent typed in, beyond the standard list. Not searchable; shown as written. */
     customAmenities: text("custom_amenities").array().notNull().default(sql`'{}'::text[]`),
+    /** A hosted 3D tour (Matterport, Kuula, CloudPano), as its share link. Shown to Plus members only. */
+    tourUrl: text("tour_url"),
+    /** Set when Trustbrick hides the tour after reviewing a change; it stays hidden until a later change is approved. */
+    tourHiddenAt: timestamp("tour_hidden_at", { withTimezone: true }),
+    tourHiddenReason: text("tour_hidden_reason"),
     carpetAreaSqft: area("carpet_area_sqft"),
     builtUpAreaSqft: area("built_up_area_sqft"),
     superBuiltUpAreaSqft: area("super_built_up_area_sqft"),
@@ -154,6 +160,7 @@ export const properties = realEstate.table(
     check("properties_ownership_type_check", sql.raw(`"ownership_type" IS NULL OR ${inList("ownership_type", OWNERSHIP_TYPES)}`)),
     check("properties_verification_status_check", sql.raw(inList("verification_status", PROPERTY_VERIFICATION_STATUSES))),
     check("properties_custom_amenities_check", sql.raw(`cardinality("custom_amenities") <= ${CUSTOM_AMENITY_LIMIT}`)),
+    check("properties_tour_url_check", sql`"tour_url" IS NULL OR (length("tour_url") <= 500 AND "tour_url" LIKE 'https://%')`),
   ],
 );
 
@@ -299,7 +306,7 @@ export const media = realEstate.table(
   (t) => [
     index("media_checksum_idx").on(t.checksum),
     check("media_storage_provider_check", sql`"storage_provider" IN ('public', 'local', 's3')`),
-    check("media_media_type_check", sql`"media_type" IN ('image', 'floor_plan', 'brochure', 'video', 'document')`),
+    check("media_media_type_check", sql`"media_type" IN ('image', 'floor_plan', 'brochure', 'video', 'document', 'panorama', 'model_3d')`),
     check("media_size_check", sql`"size_bytes" IS NULL OR "size_bytes" > 0`),
   ],
 );

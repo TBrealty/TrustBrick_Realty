@@ -8,6 +8,7 @@ import { Future } from "@/components/sections/Future";
 import { Idea } from "@/components/sections/Idea";
 import { Intelligence } from "@/components/sections/Intelligence";
 import { Paths } from "@/components/sections/Paths";
+import { PlansAd } from "@/components/sections/PlansAd";
 
 export default function Home() {
   return (
@@ -21,6 +22,7 @@ export default function Home() {
         <Idea />
         <Paths />
         <Intelligence />
+        <PlansAd />
         <Ecosystem />
         <Future />
         <FinalCta />

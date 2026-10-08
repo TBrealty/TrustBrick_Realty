@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { SubscriptionAdminCard } from "@/components/subscriptions/SubscriptionAdminCard";
+import { subscriptionForOrganization } from "@/lib/services/subscriptions";
 import { PartnerCommissionCard } from "@/components/workspace/PartnerCommissionCard";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -37,6 +39,7 @@ export default async function OrganizationPage({ params, searchParams }: Props) 
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   });
+  const orgSubscription = can(actor, "subscriptions.view", "platform") ? await subscriptionForOrganization(actor, org.id) : undefined;
   const [audit, cities] = await Promise.all([
     can(actor, "audit.view", "platform") ? auditTrailFor(actor, [org.referenceId]) : Promise.resolve(null),
     can(actor, "organizations.manage", "platform") ? cityOptions() : Promise.resolve(null),
@@ -161,6 +164,23 @@ export default async function OrganizationPage({ params, searchParams }: Props) 
           )}
         </div>
         <div className="space-y-6">
+          {orgSubscription !== undefined && (
+            <Card
+              title="Subscription"
+              actions={
+                <Link href={`/subscriptions?q=${org.referenceId}`} className="text-[0.8125rem] underline">
+                  History
+                </Link>
+              }
+            >
+              {orgSubscription ? (
+                <SubscriptionAdminCard sub={orgSubscription} canManage={can(actor, "subscriptions.manage", "platform")} />
+              ) : (
+                <p className="text-[0.8125rem] text-stone-deep">Not subscribed: on Free.</p>
+              )}
+              <p className="mt-2 text-[0.75rem] text-stone-deep">The plan covers everyone in the organization.</p>
+            </Card>
+          )}
           {org.status !== "pending" && <PartnerCommissionCard actor={actor} organization={org} />}
           <Card title="Details">
             <DescriptionList

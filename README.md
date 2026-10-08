@@ -31,6 +31,8 @@ discovery, property intelligence, professional tools, transactions, property man
 - [Database](#database)
 - [Accounts and authentication](#accounts-and-authentication)
 - [Browsing properties](#browsing-properties)
+- [Virtual tours](#virtual-tours)
+- [Mobile app API](#mobile-app-api)
 - [Homestays](#homestays)
 - [Workspaces: Agent, Admin and SuperAdmin](#workspaces-agent-admin-and-superadmin)
 - [Testing](#testing)
@@ -408,6 +410,79 @@ sellers before they can list, and that flow is still being planned.
 
 ---
 
+## Subscriptions
+
+Plans for **people** (Free, Plus) and for **partners** (Free, Pro, Business: an organization's plan, managed by its
+broker admin, or by the independent agent or host). Prices, trial lengths and features are placeholders in
+`finance.plans`; features not built yet are marked *Coming soon* everywhere they're shown. Tables are in the `finance`
+schema (`lib/db/schema/finance.ts`), rules in `lib/subscriptions/terms.ts`, the service in `lib/services/subscriptions.ts`.
+
+| Where | What |
+| --- | --- |
+| `/plans` | Public: both audiences' plans with a monthly / yearly switch (yearly saving shown), free trials and questions. Anyone can browse; choosing logs you in and returns you to confirm |
+| Home page | A *Trustbrick plans* ad section, and **Plans** in the header, mobile menu and footer |
+| Pop-up after log-in | Once per log-in, for people and partners who aren't already paying: the trial, or "keep it" during one. Never for staff |
+| `/account/subscription` | A person's plan: start the one free trial, choose monthly or yearly, cancel or keep, and history |
+| `/subscription` (workspace) | The same for a partner organization; read-only for agents whose admin manages it |
+| `/subscriptions` (workspace) | The team (`subscriptions.view` / `.manage`): who's waiting for payment, on trial, active, overdue; record payments and renewals, extend trials, change or cancel plans, give complimentary plans. The SuperAdmin edits prices and trials (existing subscribers keep their price) |
+
+- **Lifecycle:** trial → waiting for payment → active → (7 days' grace) → ended. One free trial per subscriber per
+  audience; one live subscription at a time; choosing a paid plan during a trial doesn't cut the trial short; a
+  paid plan cancelled runs to the end of its period. Expiry is worked out from the dates, so nothing has to run on
+  a schedule.
+- **No online payments yet.** A paid plan waits for the team to record the payment (`provider = 'manual'`); the
+  model has `provider` / `provider_ref` ready for a gateway such as Razorpay Subscriptions, whose webhooks would
+  record payments the same way. Every change is a `finance.subscription_events` row (append-only) and an audit event.
+- **Pause and revoke (team).** On the **View** card of the Users, Agents and Hosts lists, a user's, agent's or host's page, an
+  organization's page and the subscriptions list. Both need a remark of at least 10 characters, which the subscriber is notified of and sees on
+  their subscription page. **Pause** switches the plan off until resumed, or until an optional date when it resumes
+  by itself; the paused time is added back to the trial or paid period. **Revoke** ends it now (they can choose a
+  plan again later). A brokerage's team plan is paused or revoked on the organization's page, since it covers
+  everyone. Suspending an account pauses the person's own subscription; reinstating resumes it. The Users, Agents and
+  Hosts lists show a plan badge and filter by Subscribed / Paused / Free (staff with `subscriptions.view` only:
+  broker admins see their agents, not their plans).
+- **Using a plan in a feature:** `entitlementsFor(subject)` returns the plan in force (Free when nothing is) with
+  `has(featureKey)` and `limits`, e.g. `limits.ai_locality_reports`. A feature marked *Coming soon* never counts.
+
+---
+
+## Virtual tours
+
+A listing can have a **virtual tour**, added in the onboarding form's *Photos & media* step under **Virtual tour &
+3D view**. Any of the three is enough, and all are optional:
+
+| Part | What the agent adds | What Plus members see |
+| --- | --- | --- |
+| **360° photos** | One per room (up to 20), from a 360° camera or a 360° photo app, each with a room name. Must be about 2:1 (equirectangular), at least 2,000 px wide, up to 40 MB; re-encoded like photos (no EXIF/GPS), kept at up to 8K with a 4K rendition for viewing | A 360° viewer (Photo Sphere Viewer): drag, pinch, arrow keys or move the phone to look around; a strip of rooms to move between |
+| **3D model** | One `.glb` file (glTF 2.0, up to 100 MB), e.g. from a scanning app or an architect. The header is checked against the file | A 3D model viewer (`<model-viewer>`): turn, zoom and pan |
+| **Hosted 3D tour** | A share link from Matterport, Kuula or CloudPano. Only those hosts are accepted, and the link is rebuilt from its ID | The provider's tour, embedded in a sandboxed frame |
+
+- **Everyone sees that a listing has a tour:** a *3D tour* / *360° tour* badge on cards and the gallery, a
+  **Virtual tour & 3D view** box on the listing page (which also says when there is none), and a **Has a 360° tour or
+  3D view** filter on every search page (`?tour=1`).
+- **Opening it takes Plus** (the `virtual_tours` feature of `customer_plus`, added by migration `0022`): the tour page
+  is `/listings/[ref]/tour`. Others see what the tour contains and the way in (sign in, or *Unlock with Plus*);
+  nothing from the tour (not even a thumbnail or the hosted link) is sent to them. The `/media` route checks every tour
+  file on every request: the listing's own team and reviewers at any status, Plus members once the listing is public,
+  everyone else gets 403. Tour files are cached only in the viewer's own browser, for 10 minutes.
+- **The team** sees the tour on the listing's page (a **Virtual tour** card, playing it as Plus members see it) and at
+  `/properties/[ref]/tour`, and reviewers see it in the listing overview before approving.
+- **Changing the tour of a live listing** (published or paused) needs no withdrawal, unlike everything else: on
+  `/properties/[ref]/tour` the agent or host adds, removes, renames or reorders rooms, the 3D model and the link. Each
+  change **shows straight away** and is added to the listing's open **tour review** (`trust.review_cases`, type
+  `tour_review`, one open per listing beside its listing review), which approvers are notified of and find under
+  **Approvals → Virtual tours**, with every change listed. The reviewer **approves** it, or **hides the tour** with a
+  remark of at least 10 characters (`properties.tour_hidden_at` / `tour_hidden_reason`): it disappears for guests and
+  buyers (no badge, no filter match, 403 on its files) and the agent or host is notified why. **A hidden tour stays
+  hidden until a reviewer approves a fix:** the agent's or host's changes open a new review (flagged *Tour hidden: fix
+  to check*), and only **Approve and show** brings it back; **Keep it hidden** asks for another fix. Approving the listing itself (after a resubmission) also closes an open tour review.
+  While a listing is in review or closed, its tour can't be changed.
+- Rules live in `lib/tours/terms.ts`, the service (access, the tour, the link) in `lib/services/tours.ts`, uploads in
+  `lib/services/media.ts`, the viewer in `components/tours/TourViewer.tsx`. The app's partner mode records tours on site
+  and uploads them through `/api/v1/partner/listings/[ref]/media`, under the same rules and review.
+
+---
+
 ## Commission
 
 Trustbrick's commission from partners (agents, brokerages and hosts). Payments happen between the parties today
@@ -455,6 +530,27 @@ Documents guide).
   settle the advocate panel and their terms, the fees, and whether you'll promise a call-back time.
 
 ---
+
+## Mobile app API
+
+The Trustbrick app ([`mobile/`](mobile/README.md): React Native + Expo, one codebase for Android now and iOS later) uses
+the same server and database as the website through a JSON API at **`/api/v1`**, documented in
+[`docs/mobile-api.md`](docs/mobile-api.md). Endpoints are thin shells over the website's own
+services, so every rule, permission, rate limit and audit entry is shared.
+
+- **Sign-in** returns a session token (Better Auth's bearer plugin) that the app sends as
+  `Authorization: Bearer …`. It's the same session table, expiry and revocation as the website's
+  cookie, so `/media` files (including Plus-only tours) and every check work unchanged. Agents,
+  hosts and staff pick a workspace with the `X-Trustbrick-Workspace` header.
+- **Push notifications**: phones register their Expo push token (`platform.push_devices`, tied to
+  the app session). Every in-app notification is also pushed after the request that created it
+  commits (`lib/services/push.ts`; `PUSH_DRIVER`), and `POST /api/internal/push` retries leftovers.
+- **The app** has a customer side (browse, tours, stays, saved homes, messages, alerts, plans) and a
+  partner mode for agents and hosts (today's work, leads and visits, bookings, the guest inbox, and
+  recording a listing's virtual tour on site, with uploads that wait for signal). Partner endpoints
+  are under `/api/v1/partner`.
+- **Storage**: `STORAGE_DRIVER=s3` stores uploads in S3-compatible storage (S3, R2, MinIO) instead
+  of the local disk; files are still served through `/media` with their access checks.
 
 ## Homestays
 

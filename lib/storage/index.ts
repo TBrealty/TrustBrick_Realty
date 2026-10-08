@@ -4,6 +4,7 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { S3Driver } from "./s3";
 
 /**
  * Object storage. PostgreSQL holds media metadata only (D8); bytes live here.
@@ -11,8 +12,8 @@ import { pipeline } from "node:stream/promises";
  * The local driver writes files under STORAGE_LOCAL_DIR (default `.data/storage`, git-ignored).
  * In production it only runs when STORAGE_LOCAL_DIR is set explicitly, which is the operator
  * saying "this path is a persistent volume"; otherwise it refuses rather than silently writing
- * to an ephemeral disk. Multi-server deployments need an S3-compatible driver implementing the
- * same interface.
+ * to an ephemeral disk. STORAGE_DRIVER=s3 uses S3-compatible object storage (S3, R2, MinIO),
+ * which several servers can share: see ./s3.ts.
  */
 export interface StorageDriver {
   readonly provider: "local" | "s3";
@@ -73,7 +74,11 @@ let driver: StorageDriver | null = null;
 export function storage(): StorageDriver {
   if (driver) return driver;
   const kind = process.env.STORAGE_DRIVER ?? "local";
-  if (kind !== "local") throw new Error(`Storage driver "${kind}" is not implemented yet. See lib/storage/index.ts.`);
+  if (kind === "s3") {
+    driver = S3Driver.fromEnv();
+    return driver;
+  }
+  if (kind !== "local") throw new Error(`Unknown STORAGE_DRIVER "${kind}": use "local" or "s3".`);
   if (process.env.NODE_ENV === "production" && !process.env.STORAGE_LOCAL_DIR) {
     throw new Error("Local storage in production needs STORAGE_LOCAL_DIR pointing at a persistent volume, or an object-storage driver.");
   }

@@ -39,11 +39,31 @@ export function relativeTime(value: string | Date, now = Date.now()): string {
   const seconds = Math.round((t - now) / 1000);
   const abs = Math.abs(seconds);
   if (abs > 7 * 86400) return formatDay(new Date(t));
-  const rtf = new Intl.RelativeTimeFormat("en-IN", { numeric: "auto" });
-  if (abs < 60) return rtf.format(seconds, "second");
-  if (abs < 3600) return rtf.format(Math.round(seconds / 60), "minute");
-  if (abs < 86400) return rtf.format(Math.round(seconds / 3600), "hour");
-  return rtf.format(Math.round(seconds / 86400), "day");
+  const format = relativeFormatter();
+  if (abs < 60) return format(seconds, "second");
+  if (abs < 3600) return format(Math.round(seconds / 60), "minute");
+  if (abs < 86400) return format(Math.round(seconds / 3600), "hour");
+  return format(Math.round(seconds / 86400), "day");
+}
+
+type RelativeUnit = "second" | "minute" | "hour" | "day";
+
+/**
+ * Intl.RelativeTimeFormat, or the same English wording where it's missing: Hermes, the app's
+ * JavaScript engine on Android, doesn't have it.
+ */
+function relativeFormatter(): (value: number, unit: RelativeUnit) => string {
+  if (typeof Intl.RelativeTimeFormat === "function") {
+    const rtf = new Intl.RelativeTimeFormat("en-IN", { numeric: "auto" });
+    return (value, unit) => rtf.format(value, unit);
+  }
+  return (value, unit) => {
+    if (value === 0) return unit === "day" ? "today" : unit === "second" ? "now" : `this ${unit}`;
+    if (unit === "day" && Math.abs(value) === 1) return value < 0 ? "yesterday" : "tomorrow";
+    const n = Math.abs(value);
+    const amount = `${n} ${unit}${n === 1 ? "" : "s"}`;
+    return value < 0 ? `${amount} ago` : `in ${amount}`;
+  };
 }
 
 /** 1,284 · 12.9K · 4.2M, for stat tiles. */

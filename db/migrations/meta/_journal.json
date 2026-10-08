@@ -141,6 +141,48 @@
       "when": 1790903343756,
       "tag": "0019_commission",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791114110055,
+      "tag": "0020_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791177660859,
+      "tag": "0021_subscription_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791202450804,
+      "tag": "0022_virtual_tours",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791264275799,
+      "tag": "0023_tour_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791352417128,
+      "tag": "0024_mobile_push",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791352639467,
+      "tag": "0025_push_device_session",
+      "breakpoints": true
     }
   ]
 }

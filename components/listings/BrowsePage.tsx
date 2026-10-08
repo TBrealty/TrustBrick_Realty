@@ -76,6 +76,7 @@ function filterChips(kind: ListingKind, params: RawSearchParams, f: ListingFilte
   if (f.status) chips.push({ label: f.status === "ready" ? "Ready to move" : "Under construction", href: without("status") });
   for (const v of f.furnishing) chips.push({ label: label(FURNISHING_OPTIONS, v), href: without("furnishing", v) });
   if (f.availableNow) chips.push({ label: "Available now", href: without("available_now") });
+  if (f.tour) chips.push({ label: "Virtual tour", href: without("tour") });
   for (const v of f.occupancy) chips.push({ label: label(OCCUPANCY_OPTIONS, v), href: without("occupancy", v) });
   if (f.ac) chips.push({ label: "AC room", href: without("ac") });
   if (f.attachedBathroom) chips.push({ label: "Attached bathroom", href: without("attached") });

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ListingKind } from "@/lib/listings/filters";
 import { keyFacts, priceParts, secondaryLine } from "@/lib/listings/describe";
 import type { ListingSummary } from "@/lib/listings/queries";
+import { tourBadge } from "@/lib/tours/terms";
 import { BookmarkButton } from "./BookmarkButton";
 
 type Props = {
@@ -39,6 +40,7 @@ export function ListingCard({ listing, kind, saved, isLoggedIn, priority = false
           {listing.isSample && <span className="eyebrow bg-contrast/85 px-2 py-1.5 text-on-contrast">Sample</span>}
           {inactive && <span className="eyebrow bg-paper px-2 py-1.5 text-ink">No longer listed</span>}
           {!inactive && listing.offer && <span className="eyebrow bg-brick px-2 py-1.5 text-on-contrast">Offer</span>}
+          {!inactive && listing.tour && <span className="eyebrow bg-paper/95 px-2 py-1.5 text-ink">{tourBadge(listing.tour)}</span>}
         </div>
         {/* Above the card's stretched link, so it stays clickable. */}
         <div className="absolute top-3 right-3 z-10">

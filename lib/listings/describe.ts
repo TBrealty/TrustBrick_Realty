@@ -1,6 +1,6 @@
 import { formatArea, formatDate, formatPrice } from "@/lib/format";
 import { type ListingKind, isPlotType } from "./filters";
-import type { ListingSummary } from "./queries";
+import type { ListingSummary } from "./types";
 
 /** Plain presentation helpers for listings; no server imports, safe in client components. */
 

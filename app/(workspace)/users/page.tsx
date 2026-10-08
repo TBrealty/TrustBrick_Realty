@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PlanBadge } from "@/components/subscriptions/PlanBadge";
 import Link from "next/link";
 import { AutoSubmit } from "@/components/workspace/forms";
 import { ReferenceId } from "@/components/workspace/ReferenceId";
@@ -51,6 +52,16 @@ export default async function UsersPage({ searchParams }: Props) {
               ]}
             />
             <FilterSelect
+              name="subscription"
+              label="Subscription"
+              value={filters.subscription}
+              options={[
+                ["subscribed", "Subscribed"],
+                ["paused", "Paused"],
+                ["free", "Free"],
+              ]}
+            />
+            <FilterSelect
               name="verified"
               label="Email"
               value={filters.verified}
@@ -77,8 +88,9 @@ export default async function UsersPage({ searchParams }: Props) {
                   <Link href={`/users/${r.referenceId}`} className="font-medium hover:underline">
                     {r.name}
                   </Link>
-                  <div>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <ReferenceId value={r.referenceId} copy={false} />
+                    {r.plan && <PlanBadge plan={r.plan} />}
                   </div>
                 </div>
               ),

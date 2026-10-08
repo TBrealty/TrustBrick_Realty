@@ -13,7 +13,16 @@ const items = [
   { href: links.bookmarks, label: "Bookmarks", Icon: BookmarkIcon },
   { href: links.trips, label: "Trips", Icon: TripIcon },
   { href: links.messages, label: "Messages", Icon: MessageIcon },
+  { href: "/account/subscription", label: "Subscription", Icon: SparkIcon },
 ];
+
+function SparkIcon({ className = "size-[18px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 2.5l1.9 4.6 4.6 1.9-4.6 1.9L10 15.5l-1.9-4.6-4.6-1.9 4.6-1.9zM15.5 14.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" />
+    </svg>
+  );
+}
 
 export function AccountNav({ unreadMessages: initialUnread = 0 }: { unreadMessages?: number }) {
   const pathname = usePathname();

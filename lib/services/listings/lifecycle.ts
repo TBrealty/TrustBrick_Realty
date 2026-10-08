@@ -14,6 +14,7 @@ import { CLOSE_OUTCOMES, type CloseOutcome } from "@/lib/vocab";
 import { type AuditEvent, type RequestContext, audit } from "../audit";
 import { chargeClosedDeal, termsGap } from "../commission";
 import { notify, notifyPermissionHolders } from "../notifications";
+import { closeTourReviewsWithListing } from "../tour-review";
 import { type ListingRecord, findListingInScope } from "./access";
 
 type Row = Record<string, unknown>;
@@ -259,6 +260,8 @@ async function approve(
   const from = listing.status;
   await publish(tx, actor.userId, listing, "approve", options.reason);
   const caseRef = await closeOpenCase(tx, listing.id, "approve", actor.userId, options.reason);
+  // The listing's review covered its tour as it is now.
+  await closeTourReviewsWithListing(tx, listing.id, listing.propertyId, actor.userId);
 
   const target = { type: "listing", id: listing.id, referenceId: listing.referenceId };
   await audit(tx, actor, { event: "LISTING_APPROVED", target, organizationId: listing.organizationId, before: { status: from }, after: { status: "approved" }, metadata: { case: caseRef, reason: options.reason } }, ctx);
@@ -286,7 +289,7 @@ async function closeOpenCase(tx: Tx, listingId: string, action: ListingAction, a
   if (action === "start_review") {
     const { rows } = await tx.execute(sql`
       UPDATE trust.review_cases SET status = 'in_review', assigned_to = ${actorUserId}, updated_at = now()
-       WHERE listing_id = ${listingId} AND status = 'open' RETURNING reference_id`);
+       WHERE listing_id = ${listingId} AND case_type = 'listing_review' AND status = 'open' RETURNING reference_id`);
     return ((rows[0] as Row | undefined)?.reference_id as string) ?? null;
   }
   const outcome = CASE_OUTCOME[action];
@@ -294,7 +297,7 @@ async function closeOpenCase(tx: Tx, listingId: string, action: ListingAction, a
   const { rows } = await tx.execute(sql`
     UPDATE trust.review_cases
        SET status = ${outcome}, decided_by = ${actorUserId}, decided_at = now(), decision_reason = ${reason ?? null}, updated_at = now()
-     WHERE listing_id = ${listingId} AND status IN ('open', 'in_review') RETURNING reference_id`);
+     WHERE listing_id = ${listingId} AND case_type = 'listing_review' AND status IN ('open', 'in_review') RETURNING reference_id`);
   return ((rows[0] as Row | undefined)?.reference_id as string) ?? null;
 }
 

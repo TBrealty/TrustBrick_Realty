@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { v7 as uuidv7 } from "uuid";
 import { db } from "@/lib/db";
@@ -126,8 +127,13 @@ export const auth = betterAuth({
     },
   },
 
-  // Must stay last: lets server actions set the session cookie.
-  plugins: [nextCookies()],
+  plugins: [
+    // The mobile app sends its session token as `Authorization: Bearer …` instead of a cookie.
+    // It's the same session (same table, expiry and revocation), so every check applies.
+    bearer(),
+    // Must stay last: lets server actions set the session cookie.
+    nextCookies(),
+  ],
 });
 
 export type Session = typeof auth.$Infer.Session;

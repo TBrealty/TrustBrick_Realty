@@ -26,7 +26,7 @@ type NavDef = {
 };
 type SectionDef = { label?: string; items: NavDef[] };
 
-type BadgeKey = "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue";
+type BadgeKey = "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue" | "pendingSubscriptions";
 
 const scopeLabel = (actor: Actor, own: string, team: string, org: string) => {
   const s = actor.permissions["listings.view"];
@@ -45,6 +45,7 @@ const SECTIONS: SectionDef[] = [
       { label: "Bookings", href: "/bookings", icon: "calendar", permission: "bookings.view", atLeast: "platform", workspace: "platform" },
       { label: "Conversations", href: "/conversations", icon: "chat", permission: "conversations.view", atLeast: "platform" },
       { label: "Commissions", href: "/commissions", icon: "rupee", permission: "commission.view", atLeast: "platform", workspace: "platform", badge: "overdueCommission" },
+      { label: "Subscriptions", href: "/subscriptions", icon: "spark", permission: "subscriptions.view", atLeast: "platform", workspace: "platform", badge: "pendingSubscriptions" },
       { label: "Legal verification", href: "/legal-requests", icon: "scale", permission: "support.view", atLeast: "platform", badge: "newLegalRequests" },
     ],
   },
@@ -97,6 +98,7 @@ const SECTIONS: SectionDef[] = [
     label: "Insights",
     items: [
       { label: "Commission", href: "/commission", icon: "rupee", permission: "commission.view", workspace: "professional", badge: "commissionDue" },
+      { label: "Subscription", href: "/subscription", icon: "spark", permission: "dashboard.view", workspace: "professional" },
       { label: (a) => (a.workspace === "platform" ? "Analytics" : "Performance"), href: "/analytics", icon: "chart", permission: "analytics.view" },
     ],
   },
@@ -184,6 +186,7 @@ async function badgeCounts(actor: Actor, wanted: Set<BadgeKey>): Promise<Partial
   if (wanted.has("commissionDue")) {
     parts.push(sql`(SELECT count(*) FROM finance.commission_entries WHERE status = 'due' AND organization_id = ${actor.organization.id})::int AS "commissionDue"`);
   }
+  if (wanted.has("pendingSubscriptions")) parts.push(sql`(SELECT count(*) FROM finance.subscriptions WHERE status = 'pending_payment')::int AS "pendingSubscriptions"`);
   if (wanted.has("newLegalRequests")) parts.push(sql`(SELECT count(*) FROM platform.legal_requests WHERE status = 'new')::int AS "newLegalRequests"`);
   if (wanted.has("pendingHosts")) parts.push(sql`(SELECT count(*) FROM stays.host_profiles WHERE status = 'pending')::int AS "pendingHosts"`);
   const { rows } = await db.execute(sql`SELECT ${sql.join(parts, sql`, `)}`);

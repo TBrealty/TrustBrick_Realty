@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { transitionAction } from "@/app/(workspace)/properties/actions";
 import { ActionForm, Submit } from "@/components/workspace/forms";
 import { ListingOverview } from "@/components/workspace/ListingOverview";
-import { MediaManager } from "@/components/workspace/onboarding/MediaManager";
+import { MediaManager, VirtualTourManager } from "@/components/workspace/onboarding/MediaManager";
 import { AmenitiesForm, DetailsForm, LocationForm, PricingForm } from "@/components/workspace/onboarding/StepForms";
 import { ReferenceId } from "@/components/workspace/ReferenceId";
 import { BackLink, Card, PageHeader, StatusBadge } from "@/components/workspace/ui";
@@ -167,6 +167,12 @@ export default async function EditPropertyPage({ params, searchParams }: Props) 
             {step === "media" && (
               <>
                 <MediaManager referenceId={listing.referenceId} items={listing.media} />
+                <section aria-labelledby="virtual-tour" className="mt-10 border-t border-line-light pt-8">
+                  <h2 id="virtual-tour" className="mb-4 text-[1.0625rem] font-semibold">
+                    Virtual tour &amp; 3D view
+                  </h2>
+                  <VirtualTourManager referenceId={listing.referenceId} items={listing.media} tourUrl={listing.tourUrl} stay={listing.purpose === "stay"} />
+                </section>
                 <div className="mt-6 flex justify-end border-t border-line-light pt-5">
                   <Link href={`/properties/${ref}/edit?step=review`} className="wbtn wbtn-primary">
                     Continue to review

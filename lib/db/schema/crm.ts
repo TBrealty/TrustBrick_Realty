@@ -5,6 +5,9 @@ import { users } from "./identity";
 import { listings } from "./marketplace";
 import { memberships, organizations } from "./orgs";
 import { properties } from "./real-estate";
+import { LEAD_STATUSES, VISIT_STATUSES } from "../../crm/terms";
+
+export { LEAD_STATUSES, VISIT_STATUSES };
 
 /**
  * CRM, phase 3 (docs/database/04-tables.md §4.6), built to the extent the agent portal
@@ -16,9 +19,7 @@ export const crm = pgSchema("crm");
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`"${column}" IN (${values.map((v) => `'${v}'`).join(", ")})`);
 
-export const LEAD_STATUSES = ["new", "contacted", "qualified", "visit_scheduled", "negotiation", "converted", "lost"] as const;
 export const LEAD_SOURCES = ["listing_enquiry", "visit_request", "agent_created"] as const;
-export const VISIT_STATUSES = ["requested", "scheduled", "completed", "cancelled", "no_show"] as const;
 
 /** A person known to an organization, registered or not. */
 export const contacts = crm.table(

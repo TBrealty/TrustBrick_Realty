@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, index, jsonb, numeric, pgSchema, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { COMMISSION_BASES, COMMISSION_COLLECTION, COMMISSION_KINDS, COMMISSION_SERVICES, COMMISSION_STATUSES } from "../../vocab";
+import { boolean, check, index, integer, jsonb, numeric, pgSchema, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  BILLING_CYCLES,
+  COMMISSION_BASES,
+  COMMISSION_COLLECTION,
+  COMMISSION_KINDS,
+  COMMISSION_SERVICES,
+  COMMISSION_STATUSES,
+  LIVE_SUBSCRIPTION_STATUSES,
+  PLAN_AUDIENCES,
+  SUBSCRIPTION_STATUSES,
+} from "../../vocab";
 import { id, money, referenceId } from "./columns";
 import { users } from "./identity";
 import { listings } from "./marketplace";
@@ -113,4 +123,114 @@ export const commissionEntries = finance.table(
     check("commission_entries_charge_check", sql`"kind" <> 'charge' OR ("amount" >= 0 AND "rate_percent" IS NOT NULL AND "basis" IS NOT NULL AND "deal_value" IS NOT NULL)`),
     check("commission_entries_paid_check", sql`"status" <> 'paid' OR "payment_reference" IS NOT NULL`),
   ],
+);
+
+// ── Subscriptions ───────────────────────────────────────────────────────────────
+
+/** A plan's line on the plans page: what it includes, and whether that's live yet. */
+export type PlanFeature = { key: string; label: string; detail?: string; comingSoon?: boolean };
+
+/**
+ * The plans on sale. People and partners have their own. Prices are placeholders the SuperAdmin
+ * changes; `limits` are the numbers the features enforce (e.g. AI reports a month).
+ */
+export const plans = finance.table(
+  "plans",
+  {
+    id: id(),
+    code: text("code").notNull().unique(),
+    audience: text("audience").notNull(),
+    name: text("name").notNull(),
+    tagline: text("tagline").notNull(),
+    monthlyPrice: money("monthly_price").notNull(),
+    yearlyPrice: money("yearly_price").notNull(),
+    trialDays: integer("trial_days").notNull().default(0),
+    features: jsonb("features").$type<PlanFeature[]>().notNull(),
+    limits: jsonb("limits").$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    /** Shown as the one to choose. */
+    highlighted: boolean("highlighted").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    check("plans_audience_check", inList("audience", PLAN_AUDIENCES)),
+    check("plans_price_check", sql`"monthly_price" >= 0 AND "yearly_price" >= 0`),
+    check("plans_trial_check", sql`"trial_days" BETWEEN 0 AND 90`),
+  ],
+);
+
+/**
+ * A subscription belongs to a person (customer plans) or a partner organization (partner plans),
+ * never both. Each has at most one live subscription at a time. No payments are taken online
+ * yet: a paid plan waits for the team to record the payment (provider = 'manual'); a gateway
+ * will set provider and provider_ref and confirm payments by webhook.
+ */
+export const subscriptions = finance.table(
+  "subscriptions",
+  {
+    id: id(),
+    referenceId: referenceId("SUB"),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "restrict" }),
+    billingCycle: text("billing_cycle").notNull(),
+    status: text("status").notNull(),
+    /** The price agreed for this subscription, kept when the plan's price changes. */
+    price: money("price").notNull(),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    /** While paused: when, until when (null: until resumed), and what it goes back to. */
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    pauseUntil: timestamp("pause_until", { withTimezone: true }),
+    pausedFrom: text("paused_from"),
+    /** Paused because the account was suspended: reinstating the account resumes it. */
+    pausedForSuspension: boolean("paused_for_suspension").notNull().default(false),
+    /** The team's remark for a pause or revocation, which the subscriber sees. */
+    statusReason: text("status_reason"),
+    provider: text("provider").notNull().default("manual"),
+    providerRef: text("provider_ref"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("subscriptions_user_idx").on(t.userId),
+    index("subscriptions_org_idx").on(t.organizationId),
+    index("subscriptions_status_idx").on(t.status),
+    uniqueIndex("subscriptions_one_live_per_user").on(t.userId).where(sql.raw(`"user_id" IS NOT NULL AND "status" IN (${LIVE_SUBSCRIPTION_STATUSES.map((v) => `'${v}'`).join(", ")})`)),
+    uniqueIndex("subscriptions_one_live_per_org").on(t.organizationId).where(sql.raw(`"organization_id" IS NOT NULL AND "status" IN (${LIVE_SUBSCRIPTION_STATUSES.map((v) => `'${v}'`).join(", ")})`)),
+    check("subscriptions_subject_check", sql`num_nonnulls("user_id", "organization_id") = 1`),
+    check("subscriptions_cycle_check", inList("billing_cycle", BILLING_CYCLES)),
+    check("subscriptions_status_check", inList("status", SUBSCRIPTION_STATUSES)),
+    check("subscriptions_trial_check", sql`"status" <> 'trialing' OR "trial_ends_at" IS NOT NULL`),
+    check("subscriptions_active_check", sql`"status" <> 'active' OR ("current_period_start" IS NOT NULL AND "current_period_end" IS NOT NULL)`),
+    check("subscriptions_provider_check", sql`"provider" IN ('manual', 'razorpay')`),
+    check("subscriptions_paused_check", sql`"status" <> 'paused' OR ("paused_at" IS NOT NULL AND "paused_from" IN ('trialing', 'pending_payment', 'active'))`),
+  ],
+);
+
+/** Everything that happened to a subscription, and every payment recorded against it. Append-only. */
+export const subscriptionEvents = finance.table(
+  "subscription_events",
+  {
+    id: id(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    /** For a payment: the amount and the bank, UPI or gateway reference. */
+    amount: money("amount"),
+    paymentReference: text("payment_reference"),
+    note: text("note"),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("subscription_events_sub_idx").on(t.subscriptionId, t.createdAt)],
 );

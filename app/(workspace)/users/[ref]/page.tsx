@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PersonSubscriptionsCard } from "@/components/subscriptions/PersonSubscriptionsCard";
 import { ActionForm, ConfirmAction, Submit, TextInput } from "@/components/workspace/forms";
 import { ReferenceId } from "@/components/workspace/ReferenceId";
 import { BackLink, Card, DescriptionList, PageHeader, StatCard, Status, Timeline, When } from "@/components/workspace/ui";
@@ -9,6 +10,7 @@ import { requirePermission } from "@/lib/authz/session";
 import { AppError } from "@/lib/errors";
 import { formatDay } from "@/lib/format";
 import { auditTrailFor } from "@/lib/services/audit-log";
+import { subscriptionsForPerson } from "@/lib/services/subscriptions";
 import { getUser } from "@/lib/services/users";
 import { reinstateUserAction, suspendUserAction, updateUserAction, verifyUserAction } from "../actions";
 
@@ -28,6 +30,7 @@ export default async function UserPage({ params }: Props) {
   const audit = can(actor, "audit.view", "platform") ? await auditTrailFor(actor, [user.referenceId, ...(user.agentReferenceId ? [user.agentReferenceId] : [])]) : null;
   const canSuspend = can(actor, "users.suspend", "platform") && !user.isStaff && user.id !== actor.userId;
   const canManage = can(actor, "users.manage", "platform") && (!user.isStaff || can(actor, "admins.manage", "platform"));
+  const subscriptions = can(actor, "subscriptions.view", "platform") ? await subscriptionsForPerson(actor, user.id) : null;
 
   return (
     <>
@@ -88,6 +91,7 @@ export default async function UserPage({ params }: Props) {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-6">
+          {subscriptions && <PersonSubscriptionsCard subs={subscriptions} canManage={can(actor, "subscriptions.manage", "platform")} />}
           <Card title="Account">
             <DescriptionList
               items={[

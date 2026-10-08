@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { AppError, type ActionResult, failure, internalFailure } from "@/lib/errors";
 import { log } from "@/lib/log";
 import type { RequestContext } from "@/lib/services/audit";
+import { schedulePushDelivery } from "@/lib/services/push";
 
 /**
  * Every workspace server action goes through here: the actor is resolved from the session
@@ -27,6 +28,7 @@ export async function runAction<T>(
     const ctx = await requestContext();
     const data = await fn(actor, ctx);
     for (const path of options.revalidate ?? []) revalidatePath(path);
+    schedulePushDelivery();
     return { ok: true, data };
   } catch (error) {
     unstable_rethrow(error);
@@ -75,6 +77,7 @@ export async function runPersonAction<T>(
       : null;
     const data = await fn(person, await requestContext());
     for (const path of options.revalidate ?? []) revalidatePath(path);
+    schedulePushDelivery();
     return { ok: true, data };
   } catch (error) {
     unstable_rethrow(error);

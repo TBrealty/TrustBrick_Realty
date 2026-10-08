@@ -6,6 +6,7 @@ import { googleMapsLink } from "@/lib/listings/map-link";
 import { CATEGORY_LABELS, PURPOSE_LABELS } from "@/lib/listings/onboarding-schema";
 import type { WorkspaceListing } from "@/lib/services/listings/queries";
 import { CANCELLATION_LABELS, SPACE_TYPE_LABELS } from "@/lib/stays/labels";
+import { parseTourLink } from "@/lib/tours/terms";
 
 type L = WorkspaceListing;
 type Item = [React.ReactNode, React.ReactNode];
@@ -44,7 +45,10 @@ function Media({ listing }: { listing: L }) {
   const videos = listing.media.filter((m) => m.kind === "video");
   const plans = listing.media.filter((m) => m.kind === "floor_plan");
   const documents = listing.media.filter((m) => m.kind === "document");
-  if (!listing.media.length) return <p className="text-[0.875rem] text-stone-deep">No photos or videos yet. At least one photo is needed to submit.</p>;
+  const rooms = listing.media.filter((m) => m.kind === "panorama");
+  const model = listing.media.find((m) => m.kind === "model_3d");
+  const link = listing.tourUrl ? parseTourLink(listing.tourUrl) : null;
+  if (!listing.media.length && !link) return <p className="text-[0.875rem] text-stone-deep">No photos or videos yet. At least one photo is needed to submit.</p>;
   return (
     <div className="space-y-6">
       {photos.length > 0 && (
@@ -103,6 +107,57 @@ function Media({ listing }: { listing: L }) {
           </ul>
         </div>
       )}
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h3 className="text-[0.8125rem] font-medium">
+            Virtual tour &amp; 3D view <span className="font-normal text-stone-deep">· opens for Plus members</span>
+          </h3>
+          {(rooms.length > 0 || model || link) && (
+            <Link href={`/properties/${listing.referenceId}/tour`} className="text-[0.8125rem] underline">
+              Preview the tour
+            </Link>
+          )}
+        </div>
+        {listing.tourHidden && (
+          <p className="mb-2 rounded-[3px] border-l-2 border-brick bg-brick/6 px-3 py-2 text-[0.8125rem] text-graphite">
+            <strong className="font-medium text-ink">Hidden by Trustbrick</strong>
+            {listing.tourHidden.reason ? `: “${listing.tourHidden.reason}”` : "."}
+          </p>
+        )}
+        {rooms.length === 0 && !model && !link ? (
+          <p className="text-[0.8125rem] text-stone-deep">None. Optional: 360° photos, a 3D model or a hosted 3D tour link.</p>
+        ) : (
+          <>
+            {rooms.length > 0 && (
+              <ol className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {rooms.map((m, i) => (
+                  <li key={m.id} className="overflow-hidden rounded-[3px] border border-line-light bg-paper">
+                    {m.thumbnailUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element -- workspace thumbnails
+                      <img src={m.thumbnailUrl} alt="" className="aspect-[2/1] w-full object-cover" />
+                    )}
+                    <span className={`block truncate px-2 py-1 text-[0.75rem] ${m.altText ? "" : "text-amber"}`}>{m.altText || `Room ${i + 1}: not named`}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <ul className="mt-2 space-y-1 text-[0.8125rem] text-graphite">
+              <li>360° photos: {rooms.length ? `${rooms.length} room${rooms.length === 1 ? "" : "s"}` : "none"}</li>
+              <li>3D model: {model ? (model.originalFilename ?? "uploaded") : "none"}</li>
+              <li>
+                Hosted 3D tour:{" "}
+                {link ? (
+                  <a href={link.url} target="_blank" rel="noreferrer" className="underline">
+                    {link.provider.name}
+                  </a>
+                ) : (
+                  "none"
+                )}
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
     </div>
   );
 }

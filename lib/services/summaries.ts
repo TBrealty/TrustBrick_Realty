@@ -8,6 +8,8 @@ import { formatListingPrice } from "@/lib/format";
 import { isReferenceId } from "@/lib/reference";
 import { getAgent } from "./agents";
 import { ORG_TYPE_LABELS, getOrganization } from "./organizations";
+import { type PersonSubscriptions, subscriptionsForPerson } from "./subscriptions";
+import { getHost } from "./stays/hosts";
 import { getUser } from "./users";
 
 /**
@@ -83,6 +85,9 @@ export type UserSummary = {
   visits: { referenceId: string; listing: ListingBrief | null; status: string; at: string | null }[] | null;
   bookmarks: ListingBrief[] | null;
   reports: { referenceId: string; listing: ListingBrief | null; reason: string; status: string; createdAt: string }[] | null;
+  /** Their own plan and their organizations' plans, for admins who can see subscriptions. */
+  subscriptions: PersonSubscriptions | null;
+  canManageSubscriptions: boolean;
   href: string;
 };
 
@@ -93,6 +98,7 @@ export async function userSummary(actor: Actor, referenceId: string): Promise<Us
   const showVisits = can(actor, "visits.view", "platform");
   const showReports = can(actor, "reports.view", "platform");
   const showBookmarks = can(actor, "users.manage", "platform");
+  const showSubscriptions = can(actor, "subscriptions.view", "platform");
 
   const [profiles, journeys, visitCount, enquiries, visits, bookmarks, reports] = await Promise.all([
     db.execute(sql`
@@ -193,6 +199,8 @@ export async function userSummary(actor: Actor, referenceId: string): Promise<Us
     reports: reports
       ? (reports.rows as Row[]).map((r) => ({ referenceId: String(r.reference_id), listing: listingOf(r), reason: String(r.reason), status: String(r.status), createdAt: iso(r.created_at)! }))
       : null,
+    subscriptions: showSubscriptions ? await subscriptionsForPerson(actor, userId) : null,
+    canManageSubscriptions: can(actor, "subscriptions.manage", "platform"),
     href: `/users/${user.referenceId}`,
   };
 }
@@ -291,6 +299,9 @@ export type AgentSummary = WorkStats & {
   joinedAt: string;
   approvedAt: string | null;
   lastActiveAt: string | null;
+  /** Their own plan and their organization's, for staff who can see subscriptions. */
+  subscriptions: PersonSubscriptions | null;
+  canManageSubscriptions: boolean;
   href: string;
 };
 
@@ -322,6 +333,8 @@ export async function agentSummary(actor: Actor, referenceId: string): Promise<A
     joinedAt: agent.createdAt,
     approvedAt: agent.approvedAt,
     lastActiveAt: agent.lastActiveAt,
+    subscriptions: can(actor, "subscriptions.view", "platform") ? await subscriptionsForPerson(actor, agent.userId) : null,
+    canManageSubscriptions: can(actor, "subscriptions.manage", "platform"),
     href: `/agents/${agent.referenceId}`,
   };
 }
@@ -382,12 +395,70 @@ export async function organizationSummary(actor: Actor, referenceId: string): Pr
   };
 }
 
-export type Summary = UserSummary | AgentSummary | OrganizationSummary;
+// ── Hosts ───────────────────────────────────────────────────────────────────
+
+export type HostSummary = {
+  kind: "host";
+  referenceId: string;
+  userReferenceId: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: string;
+  verificationStatus: string;
+  statusReason: string | null;
+  city: string | null;
+  relationship: string;
+  about: string | null;
+  languages: string[];
+  stays: number;
+  liveStays: number;
+  bookings: number;
+  appliedAt: string;
+  approvedAt: string | null;
+  listings: { referenceId: string; title: string; status: string }[];
+  /** Their own plan and their own organization's (a host's partner plan), for staff who can see subscriptions. */
+  subscriptions: PersonSubscriptions | null;
+  canManageSubscriptions: boolean;
+  href: string;
+};
+
+export async function hostSummary(actor: Actor, referenceId: string): Promise<HostSummary> {
+  // getHost checks hosts.view at platform scope.
+  const host = await getHost(actor, referenceId);
+  return {
+    kind: "host",
+    referenceId: host.referenceId,
+    userReferenceId: host.userReferenceId,
+    name: host.name,
+    email: host.email,
+    phone: host.phone,
+    status: host.status,
+    verificationStatus: host.verificationStatus,
+    statusReason: host.statusReason,
+    city: host.city,
+    relationship: host.relationship,
+    about: host.about,
+    languages: host.languages,
+    stays: host.stays,
+    liveStays: host.liveStays,
+    bookings: host.bookings,
+    appliedAt: host.createdAt,
+    approvedAt: host.approvedAt,
+    listings: host.listings,
+    subscriptions: can(actor, "subscriptions.view", "platform") ? await subscriptionsForPerson(actor, host.userId) : null,
+    canManageSubscriptions: can(actor, "subscriptions.manage", "platform"),
+    href: `/hosts/${host.referenceId}`,
+  };
+}
+
+export type Summary = UserSummary | AgentSummary | OrganizationSummary | HostSummary;
 export type SummaryKind = Summary["kind"];
 
 export async function loadSummary(actor: Actor, kind: SummaryKind, referenceId: string): Promise<Summary> {
   if (kind === "user" && isReferenceId(referenceId, "USR")) return userSummary(actor, referenceId);
   if (kind === "agent" && isReferenceId(referenceId, "AGT")) return agentSummary(actor, referenceId);
+  if (kind === "host" && isReferenceId(referenceId, "HST")) return hostSummary(actor, referenceId);
   if (kind === "organization" && isReferenceId(referenceId, "ORG")) {
     assertCan(actor, "organizations.view", "platform");
     return organizationSummary(actor, referenceId);

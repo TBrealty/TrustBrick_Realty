@@ -12,6 +12,10 @@ import {
 import { ServiceFooter } from "@/components/footer/ServiceFooter";
 import { AppHeader } from "@/components/navigation/AppHeader";
 import { ServiceHeader } from "@/components/navigation/ServiceHeader";
+import { TourLocked } from "@/components/tours/TourLocked";
+import { getWorkspaceContext } from "@/lib/authz/session";
+import { canViewTour } from "@/lib/services/tours";
+import { describeTour, has3d, tourBadge } from "@/lib/tours/terms";
 import { shellFor } from "@/lib/listings/services";
 import { placeFor } from "@/lib/buy/costs";
 import { getSession } from "@/lib/auth/session";
@@ -79,6 +83,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
     listing.status === "published" && !stay
       ? await enquiryContext(listing.referenceId, session?.user.id ?? null)
       : null;
+  // Whether this visitor can open the tour; everyone is told whether there is one.
+  const workspace = listing.tour ? await getWorkspaceContext() : null;
+  const tourOpen =
+    listing.tour && workspace
+      ? await canViewTour({ userId: workspace.state === "anonymous" ? null : workspace.userId, actor: workspace.state === "ready" ? workspace.actor : null }, listing.propertyId)
+      : false;
+  const tourHref = `/listings/${listing.referenceId}/tour`;
   const price = priceParts(listing);
   const yieldPct = declaredYield(listing);
   const [cover, ...rest] = listing.images;
@@ -257,6 +268,16 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 className="object-cover"
               />
             )}
+            {listing.tour && (
+              <Link
+                href={tourHref}
+                className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-full bg-paper/95 px-4 py-2 text-[0.875rem] font-medium text-ink shadow-sm transition-colors hover:bg-paper"
+              >
+                <span aria-hidden>{has3d(listing.tour) ? "◈" : "◎"}</span>
+                {tourBadge(listing.tour)}
+                {!tourOpen && <span className="text-[0.75rem] font-normal text-stone-deep">· Plus</span>}
+              </Link>
+            )}
           </div>
           {side.map((img) => (
             // A lone side image spans both rows so the column has no gap under it.
@@ -301,6 +322,28 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 </span>
               ))}
             </p>
+
+            <section aria-labelledby="tour-title" className="mt-10 border-t border-line-light pt-8">
+              <h2 id="tour-title" className="text-[1.125rem] font-medium">
+                Virtual tour &amp; 3D view
+              </h2>
+              {!listing.tour ? (
+                <p className="mt-3 text-[1rem] text-graphite">This {stay ? "stay" : "property"} doesn&apos;t have a virtual tour or 3D view yet.</p>
+              ) : tourOpen ? (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-[1rem] text-graphite">
+                    This {stay ? "stay" : "property"} has a {describeTour(listing.tour)}. {has3d(listing.tour) ? "3D view available." : "No 3D model yet."}
+                  </p>
+                  <Link href={tourHref} className="btn btn-dark btn-compact">
+                    <span>Open the virtual tour</span>
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <TourLocked tour={listing.tour} signedIn={Boolean(session)} returnTo={tourHref} stay={Boolean(stay)} compact />
+                </div>
+              )}
+            </section>
 
             {listing.description && (
               <section className="mt-10 border-t border-line-light pt-8">

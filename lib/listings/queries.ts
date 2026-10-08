@@ -5,49 +5,13 @@ import { db } from "@/lib/db";
 import { isReferenceId } from "@/lib/reference";
 import { publicHost } from "@/lib/services/stays/hosts";
 import { STAY_TERM_COLUMNS, type StayTermsView, stayTermsOf } from "@/lib/stays/terms";
+import { type TourSummary, parseTourLink } from "@/lib/tours/terms";
 import { type ListingFilters, type ListingKind, PLOT_TYPE_CODES } from "./filters";
+import type { ListingSummary } from "./types";
 
 export const PAGE_SIZE = 12;
 
-/** Everything a listing card needs. Plain JSON, so it can cross to client components. */
-export type ListingSummary = {
-  id: string;
-  referenceId: string;
-  propertyId: string;
-  title: string;
-  transactionType: "sale" | "rent" | "lease" | "pg" | "stay";
-  status: string;
-  price: number;
-  priceNegotiable: boolean;
-  /** A current offer (expired offers are never returned). */
-  offer: { title: string; details: string | null; validUntil: string | null } | null;
-  depositAmount: number | null;
-  declaredMonthlyRent: number | null;
-  availableFrom: string | null;
-  isSample: boolean;
-  publishedAt: string | null;
-  typeCode: string;
-  typeName: string;
-  category: string;
-  locality: string;
-  city: string | null;
-  carpetAreaSqft: number | null;
-  plotAreaSqyd: number | null;
-  lifecycleStatus: string;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  furnishing: string | null;
-  projectName: string | null;
-  projectStatus: string | null;
-  possessionDate: string | null;
-  genderPolicy: "men" | "women" | "any" | null;
-  meals: string | null;
-  foodPreference: string | null;
-  occupancies: string[];
-  image: string | null;
-  /** Homestays only. */
-  stay: { spaceType: "entire_home" | "private_room"; maxGuests: number; beds: number; instantBook: boolean; petsAllowed: boolean; cleaningFee: number | null } | null;
-};
+export type { ListingSummary } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -99,7 +63,16 @@ function toSummary(r: Row): ListingSummary {
     foodPreference: (r.food_preference as string) ?? null,
     occupancies: (r.occupancies as string[]) ?? [],
     image: (r.image as string) ?? null,
+    tour: tourSummaryOf(r),
   };
+}
+
+function tourSummaryOf(r: Row): TourSummary | null {
+  const rooms = Number(r.tour_rooms ?? 0);
+  const model = Boolean(r.tour_model);
+  // Only the provider's name leaves the server; the link itself is for Plus members.
+  const link = r.tour_url ? (parseTourLink(String(r.tour_url))?.provider.name ?? null) : null;
+  return rooms > 0 || model || link ? { rooms, model, link } : null;
 }
 
 // ── Shared SQL fragments (aliases: l = listing, p = property) ─────────────────
@@ -131,7 +104,12 @@ const summaryColumns = sql`
   st.pets_allowed AS st_pets_allowed, st.cleaning_fee AS st_cleaning_fee,
   (SELECT array_agg(DISTINCT o.occupancy::text) FROM marketplace.pg_room_offers o WHERE o.listing_id = l.id) AS occupancies,
   (SELECT ${photoUrl(1280)} FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
-     WHERE ml.property_id = p.id AND m.media_type = 'image' AND NOT m.is_private ORDER BY ml.sort_order LIMIT 1) AS image`;
+     WHERE ml.property_id = p.id AND m.media_type = 'image' AND NOT m.is_private ORDER BY ml.sort_order LIMIT 1) AS image,
+  (SELECT count(*)::int FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
+     WHERE ml.property_id = p.id AND m.media_type = 'panorama' AND p.tour_hidden_at IS NULL) AS tour_rooms,
+  (p.tour_hidden_at IS NULL AND EXISTS (SELECT 1 FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
+     WHERE ml.property_id = p.id AND m.media_type = 'model_3d')) AS tour_model,
+  CASE WHEN p.tour_hidden_at IS NULL THEN p.tour_url END AS tour_url`;
 
 const summaryJoins = sql`
   JOIN real_estate.property_types pt ON pt.id = p.property_type_id
@@ -214,6 +192,10 @@ function filterConditions(kind: ListingKind, f: ListingFilters): SQL[] {
   if (f.status === "ready") c.push(sql`p.lifecycle_status IN ('ready', 'occupied')`);
   if (f.status === "under_construction") c.push(sql`p.lifecycle_status IN ('planned', 'under_construction')`);
   if (f.availableNow) c.push(sql`(l.available_from IS NULL OR l.available_from <= current_date)`);
+  if (f.tour) {
+    c.push(sql`(p.tour_hidden_at IS NULL AND (p.tour_url IS NOT NULL OR EXISTS (SELECT 1 FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
+                 WHERE ml.property_id = p.id AND m.media_type IN ('panorama', 'model_3d'))))`);
+  }
 
   if (f.gender) c.push(sql`pgt.gender_policy = ${f.gender}`);
   if (f.mealsIncluded) c.push(sql`pgt.meals <> 'none'`);

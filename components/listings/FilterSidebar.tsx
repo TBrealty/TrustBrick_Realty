@@ -605,6 +605,10 @@ export function FilterSidebar({
             </>
           )}
 
+          <Section title="Virtual tour">
+            <Check name="tour" value="1" label="Has a 360° tour or 3D view" checked={Boolean(filters.tour)} />
+          </Section>
+
           {options.amenities.length > 0 && (
             <Section title="Amenities">
               <div className="space-y-1.5">

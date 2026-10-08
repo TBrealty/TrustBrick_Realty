@@ -8,6 +8,7 @@ import { formatArea, formatDay, formatListingPrice, formatPrice, titleCase } fro
 import { brokerageLabel } from "@/lib/listings/brokerage";
 import { CLOSED_LABELS, type ListingStatus, STATUS_LABELS, STATUS_TONES, actionLabel, availableListingActions } from "@/lib/listings/lifecycle";
 import { CATEGORY_LABELS, PURPOSE_LABELS, TERMS_SCHEMAS, fieldErrorsFrom } from "@/lib/listings/onboarding-schema";
+import { describeTour, parseTourLink } from "@/lib/tours/terms";
 import { type RequestContext, audit } from "../audit";
 import { type DealContext, dealContextFor } from "../commission";
 import { notify } from "../notifications";
@@ -51,6 +52,8 @@ export type ListingCardData = {
   priceLabel: string;
   publicUrl: string | null;
   photos: { url: string; alt: string }[];
+  /** The virtual tour, as the team sees it, or null when there's none. */
+  tour: { summary: string; href: string; hidden: string | null; hiddenAt: boolean; reviewWaiting: boolean } | null;
   description: string | null;
   sections: { title: string; facts: Fact[] }[];
   amenities: string[];
@@ -255,6 +258,19 @@ export async function listingCard(actor: Actor, referenceId: string): Promise<Li
       .filter((m) => m.kind === "photo")
       .slice(0, 8)
       .map((m, i) => ({ url: m.thumbnailUrl ?? m.url, alt: m.altText ?? `Photo ${i + 1}` })),
+    tour: (() => {
+      const rooms = l.media.filter((m) => m.kind === "panorama").length;
+      const model = l.media.some((m) => m.kind === "model_3d");
+      const link = l.tourUrl ? (parseTourLink(l.tourUrl)?.provider.name ?? null) : null;
+      if (!rooms && !model && !link) return null;
+      return {
+        summary: describeTour({ rooms, model, link }),
+        href: `/properties/${l.referenceId}/tour`,
+        hidden: l.tourHidden?.reason ?? null,
+        hiddenAt: l.tourHidden !== null,
+        reviewWaiting: l.cases.some((c) => c.caseType === "tour_review" && (c.status === "open" || c.status === "in_review")),
+      };
+    })(),
     description: l.description,
     sections: sections.map((s) => ({ ...s, facts: s.facts.filter(([, v]) => v !== null && v !== "") })),
     amenities: [...l.amenityNames, ...l.customAmenities],

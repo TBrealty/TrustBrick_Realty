@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmit } from "@/components/workspace/forms";
+import { PlanBadge } from "@/components/subscriptions/PlanBadge";
 import { ReferenceId } from "@/components/workspace/ReferenceId";
+import { ViewSummary } from "@/components/workspace/SummaryDialog";
 import { Card, DataTable, EmptyState, FilterSelect, PageHeader, Pagination, Status, When } from "@/components/workspace/ui";
+import { can } from "@/lib/authz";
 import { requirePermission } from "@/lib/authz/session";
 import { parsePage } from "@/lib/services/pagination";
 import { hostFilters, listHosts } from "@/lib/services/stays/hosts";
@@ -40,6 +43,18 @@ export default async function HostsPage({ searchParams }: Props) {
                 ["rejected", "Rejected"],
               ]}
             />
+            {can(actor, "subscriptions.view", "platform") && (
+              <FilterSelect
+                name="subscription"
+                label="Subscription"
+                value={filters.subscription}
+                options={[
+                  ["subscribed", "Subscribed"],
+                  ["paused", "Paused"],
+                  ["free", "Free"],
+                ]}
+              />
+            )}
           </AutoSubmit>
           <button type="submit" className="wbtn wbtn-secondary">
             Search
@@ -58,8 +73,9 @@ export default async function HostsPage({ searchParams }: Props) {
                   <Link href={`/hosts/${r.referenceId}`} className="font-medium hover:underline">
                     {r.name}
                   </Link>
-                  <div>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <ReferenceId value={r.referenceId} copy={false} />
+                    {r.plan && <PlanBadge plan={r.plan} />}
                   </div>
                 </div>
               ),
@@ -83,11 +99,15 @@ export default async function HostsPage({ searchParams }: Props) {
             {
               header: "Action",
               align: "right",
-              cell: (r) => (
-                <Link href={`/hosts/${r.referenceId}`} className="wbtn wbtn-secondary wbtn-sm">
-                  {r.status === "pending" ? "Review" : "View"}
-                </Link>
-              ),
+              // A pending application is reviewed on its page; anyone else opens the View card.
+              cell: (r) =>
+                r.status === "pending" ? (
+                  <Link href={`/hosts/${r.referenceId}`} className="wbtn wbtn-secondary wbtn-sm">
+                    Review
+                  </Link>
+                ) : (
+                  <ViewSummary kind="host" referenceId={r.referenceId} name={r.name} />
+                ),
             },
           ]}
         />

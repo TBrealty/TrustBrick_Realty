@@ -21,6 +21,10 @@
     "admin:bootstrap": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/admin-bootstrap.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1147.0",
+    "@google/model-viewer": "^4.3.1",
+    "@photo-sphere-viewer/core": "^5.15.1",
+    "@photo-sphere-viewer/gyroscope-plugin": "^5.15.1",
     "better-auth": "^1.7.5",
     "drizzle-orm": "^0.45.2",
     "motion": "^13.4.0",
@@ -29,6 +33,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "^0.35.4",
+    "three": "^0.183.2",
     "uuid": "^14.0.2",
     "zod": "^4.6.5"
   },

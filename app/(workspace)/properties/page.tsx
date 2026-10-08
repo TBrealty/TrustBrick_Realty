@@ -13,7 +13,8 @@ import { CATEGORY_LABELS, PURPOSE_LABELS } from "@/lib/listings/onboarding-schem
 import { parsePage } from "@/lib/services/pagination";
 import { shortRate } from "@/lib/commission/terms";
 import { type ListingCommissionSummary, commissionForListings } from "@/lib/services/commission";
-import { listListingsForActor, listingGroupCounts, listingTableFilters } from "@/lib/services/listings/queries";
+import { type ListingTableRow, listListingsForActor, listingGroupCounts, listingTableFilters } from "@/lib/services/listings/queries";
+import { describeTour, tourBadge } from "@/lib/tours/terms";
 
 export const metadata: Metadata = { title: "Properties" };
 
@@ -45,7 +46,7 @@ export default async function PropertiesPage({ searchParams }: Props) {
   const tabHref = (group: StatusGroup) => {
     const q = new URLSearchParams();
     if (group !== "all") q.set("group", group);
-    for (const k of ["purpose", "category", "verification", "q", "sort"] as const) if (filters[k]) q.set(k, String(filters[k]));
+    for (const k of ["purpose", "category", "verification", "tour", "q", "sort"] as const) if (filters[k]) q.set(k, String(filters[k]));
     const s = q.toString();
     return s ? `/properties?${s}` : "/properties";
   };
@@ -98,6 +99,17 @@ export default async function PropertiesPage({ searchParams }: Props) {
               />
             )}
             <FilterSelect
+              name="tour"
+              label="Virtual tour"
+              value={filters.tour}
+              options={[
+                ["has", "Has a tour"],
+                ["none", "No tour"],
+                ["review", "Change waiting for a check"],
+                ["hidden", "Hidden by Trustbrick"],
+              ]}
+            />
+            <FilterSelect
               name="sort"
               label="Sort"
               value={filters.sort}
@@ -113,7 +125,7 @@ export default async function PropertiesPage({ searchParams }: Props) {
           <button type="submit" className="wbtn wbtn-secondary">
             Search
           </button>
-          {(filters.q || filters.purpose || filters.category || filters.verification) && (
+          {(filters.q || filters.purpose || filters.category || filters.verification || filters.tour) && (
             <Link href={tabHref(filters.group)} className="wbtn wbtn-ghost">
               Clear
             </Link>
@@ -126,7 +138,7 @@ export default async function PropertiesPage({ searchParams }: Props) {
           rowKey={(r) => r.id}
           empty={
             <EmptyState
-              title={filters.q || filters.purpose || filters.category ? "No listings match those filters" : "Nothing here yet"}
+              title={filters.q || filters.purpose || filters.category || filters.tour ? "No listings match those filters" : "Nothing here yet"}
               action={
                 can(actor, "listings.create") && result.total === 0 && !filters.q ? (
                   <Link href="/properties/new" className="wbtn wbtn-primary">
@@ -153,6 +165,7 @@ export default async function PropertiesPage({ searchParams }: Props) {
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <ReferenceId value={r.referenceId} copy={false} />
                       {r.isSample && <span className="rounded-[2px] bg-ink px-1 font-mono text-[0.625rem] tracking-wider text-paper uppercase">Sample</span>}
+                      <TourBadge row={r} canReview={can(actor, "listings.approve", "platform")} />
                     </div>
                   </div>
                 </div>
@@ -248,5 +261,40 @@ function CommissionCell({ c }: { c?: ListingCommissionSummary }) {
         <StatusBadge tone={c.overdue ? "danger" : paid ? "success" : "warning"}>{c.overdue ? "Overdue" : paid ? "Paid" : `${formatPrice(c.due, { compact: false })} due`}</StatusBadge>
       </span>
     </span>
+  );
+}
+
+/**
+ * A listing's tour in the list: what it has, and whether Trustbrick has hidden it or has a change
+ * to check. Reviewers go straight to the check; everyone else to the tour.
+ */
+function TourBadge({ row, canReview }: { row: ListingTableRow; canReview: boolean }) {
+  const t = row.tour;
+  if (!t) return null;
+  const summary = describeTour({ rooms: t.rooms, model: t.model, link: t.link });
+  const chip = "inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[0.6875rem] font-medium whitespace-nowrap";
+  return (
+    <>
+      <Link
+        href={`/properties/${row.referenceId}/tour`}
+        title={t.hidden ? `${summary}. Hidden by Trustbrick.` : summary}
+        className={`${chip} ${t.hidden ? "bg-ink/6 text-stone-deep line-through decoration-stone" : "bg-slate/10 text-slate"} hover:underline`}
+      >
+        <span aria-hidden>{t.model || t.link ? "◈" : "◎"}</span>
+        {tourBadge({ rooms: t.rooms, model: t.model, link: t.link })}
+        {t.hidden && <span className="sr-only"> (hidden)</span>}
+      </Link>
+      {t.hidden && <span className={`${chip} bg-brick/10 text-brick`}>Tour hidden</span>}
+      {t.reviewCase &&
+        (canReview ? (
+          <Link href={`/approvals/${t.reviewCase}`} className={`${chip} bg-amber/12 text-amber hover:underline`}>
+            Tour change to check
+          </Link>
+        ) : (
+          <span className={`${chip} bg-amber/12 text-amber`} title="Trustbrick is checking a recent change to the tour">
+            Tour check pending
+          </span>
+        ))}
+    </>
   );
 }

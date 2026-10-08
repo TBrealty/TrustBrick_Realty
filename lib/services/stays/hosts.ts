@@ -2,7 +2,7 @@ import "server-only";
 import { type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { RULES, limit } from "@/lib/auth/rate-limit";
-import { assertCan } from "@/lib/authz";
+import { assertCan, can } from "@/lib/authz";
 import type { Actor } from "@/lib/authz/actor";
 import { type Tx, db } from "@/lib/db";
 import { AppError, conflict, invalid, notFound } from "@/lib/errors";
@@ -14,6 +14,7 @@ import { HOLD_REASONS, pauseListings, resumeListings } from "../listings/lifecyc
 import { notify, notifyPermissionHolders } from "../notifications";
 import { type Page, pageParams } from "../pagination";
 import { getSetting } from "../settings";
+import { SUBSCRIPTION_FILTER, ownPlanColumn, subscriptionFilterSql } from "../subscriptions";
 
 /**
  * Hosts (docs/stays/README.md §3). Anyone with a confirmed account may apply; an admin checks
@@ -104,6 +105,7 @@ export async function applyAsHost(user: PersonActor, raw: unknown, ctx: RequestC
 export const hostFilters = z.object({
   q: z.string().trim().max(100).optional().catch(undefined),
   status: z.enum(["pending", "active", "suspended", "rejected"]).optional().catch(undefined),
+  subscription: SUBSCRIPTION_FILTER,
 });
 export type HostFilters = z.infer<typeof hostFilters>;
 
@@ -123,6 +125,8 @@ export type HostRow = {
   liveStays: number;
   bookings: number;
   createdAt: string;
+  /** Their own live subscription (a host's partner plan), for staff who can see subscriptions. */
+  plan: { name: string; status: string } | null;
 };
 
 const HOST_COLUMNS = sql`
@@ -150,6 +154,7 @@ const toHostRow = (r: Row): HostRow => ({
   liveStays: Number(r.live_stays),
   bookings: Number(r.bookings),
   createdAt: iso(r.created_at)!,
+  plan: (r.own_plan as { name: string; status: string } | null) ?? null,
 });
 
 export async function listHosts(actor: Actor, filters: HostFilters, page: number): Promise<Page<HostRow>> {
@@ -161,11 +166,14 @@ export async function listHosts(actor: Actor, filters: HostFilters, page: number
     const like = `%${likeEscape(filters.q)}%`;
     where.push(sql`(hp.reference_id = ${ref} OR u.reference_id = ${ref} OR u.name ILIKE ${like} OR u.email ILIKE ${like} OR hp.phone LIKE ${like})`);
   }
+  const seesPlans = can(actor, "subscriptions.view", "platform");
+  const bySubscription = seesPlans ? subscriptionFilterSql(filters.subscription, sql`hp.user_id`) : null;
+  if (bySubscription) where.push(bySubscription);
   const whereSql = sql.join(where, sql` AND `);
   const { limit: take, offset } = pageParams(page);
   const [rows, count] = await Promise.all([
     db.execute(sql`
-      SELECT ${HOST_COLUMNS} FROM stays.host_profiles hp JOIN identity.users u ON u.id = hp.user_id
+      SELECT ${HOST_COLUMNS}, ${seesPlans ? ownPlanColumn(sql`hp.user_id`) : sql`NULL AS own_plan`} FROM stays.host_profiles hp JOIN identity.users u ON u.id = hp.user_id
         LEFT JOIN geography.places city ON city.id = hp.city_place_id
        WHERE ${whereSql} ORDER BY (hp.status = 'pending') DESC, hp.created_at DESC LIMIT ${take} OFFSET ${offset}`),
     db.execute(sql`SELECT count(*)::int AS n FROM stays.host_profiles hp JOIN identity.users u ON u.id = hp.user_id WHERE ${whereSql}`),

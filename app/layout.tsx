@@ -1,6 +1,7 @@
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { PlansPromo } from "@/components/subscriptions/PlansPromo";
 import { site } from "@/lib/site";
 import "./globals.css";
 
@@ -75,7 +76,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           {"document.documentElement.classList.add('js');try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}"}
         </Script>
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Once after each log-in: the plans pop-up. */}
+        <PlansPromo />
+      </body>
     </html>
   );
 }

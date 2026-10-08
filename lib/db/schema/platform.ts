@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, jsonb, pgSchema, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { citext, id, referenceId } from "./columns";
-import { users } from "./identity";
+import { sessions, users } from "./identity";
 import { listings } from "./marketplace";
 import { LEGAL_DOCUMENTS, LEGAL_PROPERTY_TYPES, LEGAL_PURPOSES, LEGAL_REQUEST_STATUSES, LEGAL_SERVICES, LEGAL_STATES } from "../../vocab";
 
@@ -62,12 +62,44 @@ export const notifications = platform.table(
     /** A same-site path, e.g. `/properties/LST-7K4M9Q2X`. */
     link: text("link"),
     readAt: timestamp("read_at", { withTimezone: true }),
+    /** When this was handed to push delivery (whether or not the person has a phone registered). */
+    pushedAt: timestamp("pushed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("notifications_user_created_idx").on(t.userId, t.createdAt.desc()),
+    index("notifications_push_pending_idx").on(t.createdAt).where(sql`"pushed_at" IS NULL`),
     index("notifications_user_unread_idx").on(t.userId).where(sql`"read_at" IS NULL`),
     check("notifications_link_check", sql`"link" IS NULL OR ("link" LIKE '/%' AND "link" NOT LIKE '//%')`),
+  ],
+);
+
+/**
+ * Phones signed in to the Trustbrick app, for push notifications. One row per push token: a
+ * token that signs in as someone else moves to them, and one the push service reports as gone
+ * is disabled. Tied to the app session, so a phone stops getting pushes when it signs out or
+ * its session is revoked (password reset, suspension).
+ */
+export const pushDevices = platform.table(
+  "push_devices",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    /** The app session that registered it: signing out, or any revocation, removes the device too. */
+    sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    appVersion: text("app_version"),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("push_devices_user_idx").on(t.userId).where(sql`"disabled_at" IS NULL`),
+    check("push_devices_platform_check", sql`"platform" IN ('android', 'ios')`),
+    check("push_devices_token_check", sql`length("token") BETWEEN 10 AND 300`),
   ],
 );
 

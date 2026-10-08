@@ -9,6 +9,7 @@ import { type ListingStatus, STATUS_GROUPS, type StatusGroup } from "@/lib/listi
 import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { LISTING_STATUSES, PURPOSES } from "@/lib/vocab";
 import { STAY_TERM_COLUMNS, type StayTermsView, stayTermsOf } from "@/lib/stays/terms";
+import { parseTourLink } from "@/lib/tours/terms";
 
 export type { StayTermsView } from "@/lib/stays/terms";
 import { type MediaItem, listPropertyMedia } from "../media";
@@ -26,6 +27,8 @@ export const listingTableFilters = z.object({
   verification: z.enum(["unverified", "pending", "verified", "rejected"]).optional().catch(undefined),
   q: z.string().trim().max(100).optional().catch(undefined),
   sort: z.enum(["updated", "created", "price_desc", "price_asc"]).catch("updated"),
+  /** Virtual tour: has one, has none, hidden by Trustbrick, or a change waiting for a check. */
+  tour: z.enum(["has", "none", "hidden", "review"]).optional().catch(undefined),
 });
 export type ListingTableFilters = z.infer<typeof listingTableFilters>;
 
@@ -52,7 +55,15 @@ export type ListingTableRow = {
   createdAt: string;
   updatedAt: string;
   image: string | null;
+  /** The tour as the team sees it (hidden or not), or null when there's none. */
+  tour: { rooms: number; model: boolean; link: string | null; hidden: boolean; reviewCase: string | null } | null;
 };
+
+/** Whether a property has any part of a tour, whatever Trustbrick has decided about it. */
+const HAS_TOUR = sql`(p.tour_url IS NOT NULL OR EXISTS (SELECT 1 FROM real_estate.media_links tml JOIN real_estate.media tm ON tm.id = tml.media_id
+                       WHERE tml.property_id = p.id AND tm.media_type IN ('panorama', 'model_3d')))`;
+const OPEN_TOUR_REVIEW = sql`(SELECT rc.reference_id FROM trust.review_cases rc
+                               WHERE rc.listing_id = l.id AND rc.case_type = 'tour_review' AND rc.status IN ('open', 'in_review') LIMIT 1)`;
 
 const likeEscape = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
@@ -65,6 +76,10 @@ export async function listListingsForActor(actor: Actor, filters: ListingTableFi
   if (filters.purpose) where.push(sql`l.transaction_type = ${filters.purpose}`);
   if (filters.category) where.push(sql`pt.category = ${filters.category}`);
   if (filters.verification) where.push(sql`p.verification_status = ${filters.verification}`);
+  if (filters.tour === "has") where.push(HAS_TOUR);
+  if (filters.tour === "none") where.push(sql`NOT ${HAS_TOUR}`);
+  if (filters.tour === "hidden") where.push(sql`p.tour_hidden_at IS NOT NULL`);
+  if (filters.tour === "review") where.push(sql`${OPEN_TOUR_REVIEW} IS NOT NULL`);
   if (filters.q) {
     const ref = normalizeReferenceId(filters.q);
     where.push(sql`(l.reference_id = ${ref} OR p.reference_id = ${ref} OR l.title ILIKE ${`%${likeEscape(filters.q)}%`} OR loc.name ILIKE ${`%${likeEscape(filters.q)}%`})`);
@@ -97,7 +112,12 @@ export async function listListingsForActor(actor: Actor, filters: ListingTableFi
              (SELECT CASE WHEN m.storage_provider = 'public' THEN m.storage_key
                           ELSE '/media/' || coalesce((SELECT v->>'key' FROM jsonb_array_elements(m.variants) v WHERE (v->>'width')::int = 640), m.storage_key) END
                 FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
-               WHERE ml.property_id = p.id AND m.media_type = 'image' AND NOT m.is_private ORDER BY ml.sort_order LIMIT 1) AS image
+               WHERE ml.property_id = p.id AND m.media_type = 'image' AND NOT m.is_private ORDER BY ml.sort_order LIMIT 1) AS image,
+             (SELECT count(*) FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
+               WHERE ml.property_id = p.id AND m.media_type = 'panorama')::int AS tour_rooms,
+             EXISTS (SELECT 1 FROM real_estate.media_links ml JOIN real_estate.media m ON m.id = ml.media_id
+               WHERE ml.property_id = p.id AND m.media_type = 'model_3d') AS tour_model,
+             p.tour_url, p.tour_hidden_at IS NOT NULL AS tour_hidden, ${OPEN_TOUR_REVIEW} AS tour_review
       ${from}
       LEFT JOIN LATERAL (
         SELECT u.name, coalesce(ap.reference_id, u.reference_id) AS reference_id
@@ -134,6 +154,16 @@ export async function listListingsForActor(actor: Actor, filters: ListingTableFi
       createdAt: iso(r.created_at)!,
       updatedAt: iso(r.updated_at)!,
       image: (r.image as string) ?? null,
+      tour:
+        Number(r.tour_rooms) > 0 || r.tour_model || r.tour_url
+          ? {
+              rooms: Number(r.tour_rooms),
+              model: Boolean(r.tour_model),
+              link: r.tour_url ? (parseTourLink(String(r.tour_url))?.provider.name ?? null) : null,
+              hidden: Boolean(r.tour_hidden),
+              reviewCase: (r.tour_review as string) ?? null,
+            }
+          : null,
     })),
     total: Number((count.rows[0] as Row).total),
     page,
@@ -219,9 +249,13 @@ export type WorkspaceListing = {
   amenities: string[];
   amenityNames: string[];
   customAmenities: string[];
+  /** The hosted 3D tour link, as saved. */
+  tourUrl: string | null;
+  /** Set when Trustbrick hid the tour after reviewing a change. */
+  tourHidden: { at: string; reason: string | null } | null;
   media: MediaItem[];
   history: { fromStatus: string | null; toStatus: string; action: string; reason: string | null; actorName: string | null; createdAt: string }[];
-  cases: { referenceId: string; status: string; flags: Record<string, unknown>; decisionReason: string | null; createdAt: string }[];
+  cases: { referenceId: string; caseType: "listing_review" | "tour_review"; status: string; flags: Record<string, unknown>; decisionReason: string | null; createdAt: string }[];
   stats: { views: number; uniqueViewers: number; leads: number; saves: number; visits: number };
   createdAt: string;
   updatedAt: string;
@@ -235,7 +269,7 @@ export async function getListingForActor(actor: Actor, referenceId: string): Pro
   if (!isReferenceId(referenceId, "LST")) throw notFound();
   const { rows } = await db.execute(sql`
     SELECT l.*, p.reference_id AS property_reference_id, p.lifecycle_status, p.ownership_type, p.year_built, p.carpet_area_sqft,
-           p.built_up_area_sqft, p.super_built_up_area_sqft, p.floor_number, p.total_floors, p.unit_number, p.verification_status, p.custom_amenities,
+           p.built_up_area_sqft, p.super_built_up_area_sqft, p.floor_number, p.total_floors, p.unit_number, p.verification_status, p.custom_amenities, p.tour_url, p.tour_hidden_at, p.tour_hidden_reason,
            pt.code AS type_code, pt.name AS type_name, pt.category,
            o.name AS org_name, o.reference_id AS org_reference_id,
            a.place_id AS locality_id, loc.name AS locality, city.id AS city_id, city.name AS city, a.line1, a.line2, a.landmark, a.postal_code,
@@ -280,7 +314,7 @@ export async function getListingForActor(actor: Actor, referenceId: string): Pro
     db.execute(sql`SELECT h.from_status, h.to_status, h.action, h.reason, h.created_at, u.name AS actor_name
                      FROM marketplace.listing_status_history h LEFT JOIN identity.users u ON u.id = h.actor_user_id
                     WHERE h.listing_id = ${listingId} ORDER BY h.created_at DESC, h.id DESC LIMIT 50`),
-    db.execute(sql`SELECT reference_id, status, flags, decision_reason, created_at FROM trust.review_cases
+    db.execute(sql`SELECT reference_id, case_type, status, flags, decision_reason, created_at FROM trust.review_cases
                     WHERE listing_id = ${listingId} ORDER BY created_at DESC LIMIT 10`),
     db.execute(sql`SELECT
         (SELECT coalesce(sum(view_count), 0) FROM marketplace.listing_views WHERE listing_id = ${listingId})::int AS views,
@@ -358,6 +392,8 @@ export async function getListingForActor(actor: Actor, referenceId: string): Pro
     amenities: (amenities.rows as Row[]).map((a) => String(a.code)),
     amenityNames: (amenities.rows as Row[]).map((a) => String(a.name)),
     customAmenities: (r.custom_amenities as string[] | null) ?? [],
+    tourUrl: (r.tour_url as string) ?? null,
+    tourHidden: r.tour_hidden_at ? { at: iso(r.tour_hidden_at)!, reason: (r.tour_hidden_reason as string) ?? null } : null,
     media: mediaItems,
     history: (history.rows as Row[]).map((h) => ({
       fromStatus: (h.from_status as string) ?? null,
@@ -369,6 +405,7 @@ export async function getListingForActor(actor: Actor, referenceId: string): Pro
     })),
     cases: (cases.rows as Row[]).map((c) => ({
       referenceId: String(c.reference_id),
+      caseType: c.case_type as "listing_review" | "tour_review",
       status: String(c.status),
       flags: (c.flags as Record<string, unknown>) ?? {},
       decisionReason: (c.decision_reason as string) ?? null,

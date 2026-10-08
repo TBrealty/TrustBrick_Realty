@@ -8,16 +8,21 @@ import { listingScope } from "@/lib/authz/scope";
 import { db } from "@/lib/db";
 import { media, mediaLinks } from "@/lib/db/schema/real-estate";
 import { AppError, conflict, invalid, notFound } from "@/lib/errors";
-import { isEditable } from "@/lib/listings/lifecycle";
+import { type ListingStatus, isEditable } from "@/lib/listings/lifecycle";
 import { log } from "@/lib/log";
 import { storage } from "@/lib/storage";
-import { UPLOAD_KINDS, type UploadKind, sniff } from "@/lib/storage/sniff";
+import { TOUR_MEDIA_TYPES, UPLOAD_KINDS, type UploadKind, sniff } from "@/lib/storage/sniff";
+import { PANORAMA_MAX_WIDTH, PANORAMA_MIN_WIDTH, PANORAMA_VIEW_WIDTH, glbProblem, isLiveForTours, isPanoramaShape } from "@/lib/tours/terms";
 import { findListingInScope } from "./listings/access";
+import { recordTourChange } from "./tour-review";
 
 type Row = Record<string, unknown>;
 
 const VARIANT_WIDTHS = [640, 1280, 1920] as const;
 const MAX_PIXELS = 60_000_000;
+/** 360° cameras shoot up to about 12K × 6K. */
+const MAX_PANORAMA_PIXELS = 75_000_000;
+const PANORAMA_WIDTHS = [640, PANORAMA_VIEW_WIDTH] as const;
 
 export type MediaItem = {
   id: string;
@@ -34,8 +39,23 @@ export type MediaItem = {
   sortOrder: number;
 };
 
-const kindOf = (mediaType: string): UploadKind =>
-  mediaType === "floor_plan" ? "floor_plan" : mediaType === "video" ? "video" : mediaType === "document" ? "document" : "photo";
+const KIND_OF: Record<string, UploadKind> = { floor_plan: "floor_plan", video: "video", document: "document", panorama: "panorama", model_3d: "model_3d" };
+const kindOf = (mediaType: string): UploadKind => KIND_OF[mediaType] ?? "photo";
+
+const isTourKind = (kind: UploadKind) => kind === "panorama" || kind === "model_3d";
+
+/**
+ * Whether a media change may be made now: anything while the listing can be edited; on a live
+ * listing, only its tour, which shows straight away and is reviewed after ("live").
+ */
+function changeMode(status: ListingStatus, kinds: UploadKind[]): "draft" | "live" {
+  if (isEditable(status)) return "draft";
+  const tourOnly = kinds.length > 0 && kinds.every(isTourKind);
+  if (tourOnly && isLiveForTours(status)) return "live";
+  throw conflict(tourOnly ? "The tour can't be changed while the listing is being reviewed." : "Withdraw the listing before changing its media.");
+}
+
+const roomLabel = (alt: string | null) => (alt ? `“${alt}”` : "an unnamed room");
 
 /** URL for a stored object: sample media live in /public, uploads are served by /media/… */
 export function urlFor(provider: string, key: string): string {
@@ -47,11 +67,12 @@ export function toMediaItem(r: Row): MediaItem {
   const provider = String(r.storage_provider);
   const key = String(r.storage_key);
   const pick = (width: number) => variants.find((v) => v.width === width)?.key;
+  const kind = kindOf(String(r.media_type));
   return {
     id: String(r.id),
-    kind: kindOf(String(r.media_type)),
+    kind,
     mimeType: String(r.mime_type),
-    url: urlFor(provider, pick(1920) ?? key),
+    url: urlFor(provider, pick(kind === "panorama" ? PANORAMA_VIEW_WIDTH : 1920) ?? key),
     thumbnailUrl: variants.length ? urlFor(provider, pick(640) ?? key) : String(r.mime_type).startsWith("image/") ? urlFor(provider, key) : null,
     altText: (r.alt_text as string) ?? null,
     width: r.width === null ? null : Number(r.width),
@@ -107,7 +128,7 @@ export async function uploadListingMedia(
 ): Promise<MediaItem> {
   const rules = UPLOAD_KINDS[kind];
   const listing = await findListingInScope(actor, referenceId, "listings.edit");
-  if (!isEditable(listing.status)) throw conflict("Withdraw the listing before changing its media.");
+  const mode = changeMode(listing.status, [kind]);
   if (!body) throw invalid("No file was received.");
 
   const countResult = await db.execute(sql`
@@ -120,7 +141,8 @@ export async function uploadListingMedia(
   const bytes = await readLimited(body, rules.maxBytes);
   const type = sniff(bytes.subarray(0, 32));
   if (!type || !(rules.families as readonly string[]).includes(type.family)) {
-    const allowed = kind === "video" ? "MP4, MOV or WebM" : kind === "photo" ? "JPEG, PNG, WebP or AVIF" : "PDF or an image";
+    const allowed =
+      kind === "video" ? "MP4, MOV or WebM" : kind === "photo" || kind === "panorama" ? "JPEG, PNG, WebP or AVIF" : kind === "model_3d" ? "a .glb 3D model" : "PDF or an image";
     throw invalid(`That file type isn't supported here. Use ${allowed}.`);
   }
   if (type.mime === "image/heic") throw invalid("HEIC photos aren't supported yet. Export the photo as JPEG and try again.");
@@ -139,7 +161,16 @@ export async function uploadListingMedia(
   let variants: { width: number; key: string }[] | null = null;
 
   try {
-    if (type.family === "image") {
+    if (kind === "panorama") {
+      ({ storageKey, width, height, sizeBytes, variants } = await storePanorama(bytes, folder, written));
+      mimeType = "image/jpeg";
+    } else if (type.family === "model") {
+      const problem = glbProblem(bytes);
+      if (problem) throw invalid(problem);
+      storageKey = `${folder}/original.glb`;
+      await store.put(storageKey, bytes);
+      written.push(storageKey);
+    } else if (type.family === "image") {
       const image = sharp(bytes, { limitInputPixels: MAX_PIXELS, failOn: "error" }).rotate();
       const meta = await image.metadata();
       if (!meta.width || !meta.height) throw invalid("That image couldn't be read.");
@@ -192,6 +223,7 @@ export async function uploadListingMedia(
       const sortOrder = Number((sort.rows[0] as Row).next);
       await tx.insert(mediaLinks).values({ mediaId, propertyId: listing.propertyId, sortOrder });
       await tx.execute(sql`UPDATE marketplace.listings SET updated_at = now() WHERE id = ${listing.id}`);
+      if (mode === "live") await recordTourChange(tx, actor, listing, kind === "panorama" ? "Added a 360° photo" : "Added a 3D model");
       return { ...row, sortOrder };
     });
 
@@ -217,43 +249,87 @@ export async function uploadListingMedia(
   }
 }
 
+/**
+ * A 360° photo: checked for the 2:1 shape of a full sphere, re-encoded like any photo (no EXIF,
+ * no GPS), and kept at up to 8K wide, with a 4K rendition for the viewer and a small thumbnail.
+ */
+async function storePanorama(bytes: Buffer, folder: string, written: string[]) {
+  const store = storage();
+  const image = sharp(bytes, { limitInputPixels: MAX_PANORAMA_PIXELS, failOn: "error" }).rotate();
+  const meta = await image.metadata();
+  if (!meta.width || !meta.height) throw invalid("That image couldn't be read.");
+  const [w, h] = (meta.orientation ?? 1) >= 5 ? [meta.height, meta.width] : [meta.width, meta.height];
+  if (!isPanoramaShape(w, h)) {
+    throw invalid(`That isn't a 360° photo: it's ${w}×${h}. A full 360° photo is twice as wide as it is tall, like 6000×3000. Export it from your 360° camera's app as an "equirectangular" photo.`);
+  }
+  if (w < PANORAMA_MIN_WIDTH) throw invalid(`That 360° photo is too small. Use one at least ${PANORAMA_MIN_WIDTH} pixels wide.`);
+  const original = await image.clone().resize({ width: PANORAMA_MAX_WIDTH, withoutEnlargement: true }).jpeg({ quality: 85, mozjpeg: true }).toBuffer({ resolveWithObject: true });
+  const storageKey = `${folder}/original.jpg`;
+  await store.put(storageKey, original.data);
+  written.push(storageKey);
+  const variants: { width: number; key: string }[] = [];
+  for (const vw of PANORAMA_WIDTHS) {
+    if (vw >= original.info.width && vw !== PANORAMA_WIDTHS[0]) continue;
+    const key = `${folder}/w${vw}.webp`;
+    const out = await sharp(original.data, { limitInputPixels: MAX_PANORAMA_PIXELS }).resize({ width: vw }).webp({ quality: vw === PANORAMA_WIDTHS[0] ? 75 : 82 }).toBuffer();
+    await store.put(key, out);
+    written.push(key);
+    variants.push({ width: vw, key });
+  }
+  return { storageKey, width: original.info.width, height: original.info.height, sizeBytes: original.data.byteLength, variants };
+}
+
 async function editableMedia(actor: Actor, referenceId: string, mediaId: string) {
   const listing = await findListingInScope(actor, referenceId, "listings.edit");
-  if (!isEditable(listing.status)) throw conflict("Withdraw the listing before changing its media.");
   const [row] = await db
-    .select({ id: media.id, storageKey: media.storageKey, variants: media.variants })
+    .select({ id: media.id, storageKey: media.storageKey, variants: media.variants, mediaType: media.mediaType, altText: media.altText })
     .from(media)
     .innerJoin(mediaLinks, eq(mediaLinks.mediaId, media.id))
     .where(and(eq(media.id, mediaId), eq(mediaLinks.propertyId, listing.propertyId)));
   if (!row) throw notFound();
-  return { listing, row };
+  const kind = kindOf(row.mediaType);
+  return { listing, row, kind, mode: changeMode(listing.status, [kind]) };
 }
 
 export async function deleteListingMedia(actor: Actor, referenceId: string, mediaId: string) {
-  const { row } = await editableMedia(actor, referenceId, mediaId);
-  await db.delete(media).where(eq(media.id, row.id));
+  const { listing, row, kind, mode } = await editableMedia(actor, referenceId, mediaId);
+  await db.transaction(async (tx) => {
+    await tx.delete(media).where(eq(media.id, row.id));
+    if (mode === "live") await recordTourChange(tx, actor, listing, kind === "panorama" ? `Removed the 360° photo of ${roomLabel(row.altText)}` : "Removed the 3D model");
+  });
   await storage()
     .remove([row.storageKey, ...(row.variants ?? []).map((v) => v.key)])
     .catch((e) => log.warn("media.cleanup_failed", { error: String(e) }));
 }
 
 export async function updateMediaAlt(actor: Actor, referenceId: string, mediaId: string, altText: string) {
-  const { row } = await editableMedia(actor, referenceId, mediaId);
+  const { listing, row, mode } = await editableMedia(actor, referenceId, mediaId);
   const alt = altText.trim().slice(0, 200) || null;
-  await db.update(media).set({ altText: alt, updatedAt: new Date() }).where(eq(media.id, row.id));
+  if (alt === row.altText) return;
+  await db.transaction(async (tx) => {
+    await tx.update(media).set({ altText: alt, updatedAt: new Date() }).where(eq(media.id, row.id));
+    if (mode === "live") await recordTourChange(tx, actor, listing, row.altText ? `Renamed ${roomLabel(row.altText)} to ${roomLabel(alt)}` : `Named a room ${roomLabel(alt)}`);
+  });
 }
 
 /** Sets photo order. Only media already linked to this property can be reordered. */
 export async function reorderListingMedia(actor: Actor, referenceId: string, orderedIds: string[]) {
   const listing = await findListingInScope(actor, referenceId, "listings.edit");
-  if (!isEditable(listing.status)) throw conflict("Withdraw the listing before changing its media.");
+  const ids = orderedIds.slice(0, 100);
+  const { rows } = ids.length
+    ? await db.execute(sql`
+        SELECT m.media_type FROM real_estate.media m JOIN real_estate.media_links ml ON ml.media_id = m.id
+         WHERE ml.property_id = ${listing.propertyId} AND m.id = ANY(${sql.param(ids)}::uuid[])`)
+    : { rows: [] };
+  const mode = changeMode(listing.status, (rows as Row[]).map((r) => kindOf(String(r.media_type))));
   await db.transaction(async (tx) => {
-    for (const [index, id] of orderedIds.slice(0, 100).entries()) {
+    for (const [index, id] of ids.entries()) {
       await tx
         .update(mediaLinks)
         .set({ sortOrder: index })
         .where(and(eq(mediaLinks.mediaId, id), eq(mediaLinks.propertyId, listing.propertyId)));
     }
+    if (mode === "live") await recordTourChange(tx, actor, listing, "Changed the order of the rooms");
   });
 }
 
@@ -261,12 +337,15 @@ export async function reorderListingMedia(actor: Actor, referenceId: string, ord
  * For the /media route. Public media is served to anyone who has the (unguessable) URL;
  * private media (documents) only to someone who could open a listing of that property.
  */
-export async function resolveMediaForServing(key: string, actor: Actor | null): Promise<{ key: string; mimeType: string; isPrivate: boolean } | null> {
+export async function resolveMediaForServing(
+  key: string,
+  actor: Actor | null,
+): Promise<{ key: string; mimeType: string; isPrivate: boolean; tourOfProperty: string | null } | null> {
   const match = /^properties\/([0-9a-f-]{36})\/([0-9a-f-]{36})-[0-9a-f]{12}\/(original\.[a-z0-9]{2,5}|w\d{3,4}\.webp)$/.exec(key);
   if (!match) return null;
   const [, propertyId, mediaId, file] = match;
   const { rows } = await db.execute(sql`
-    SELECT m.storage_key, m.mime_type, m.is_private, m.variants FROM real_estate.media m
+    SELECT m.storage_key, m.mime_type, m.media_type, m.is_private, m.variants FROM real_estate.media m
       JOIN real_estate.media_links ml ON ml.media_id = m.id AND ml.property_id = ${propertyId}
      WHERE m.id = ${mediaId}`);
   const r = rows[0] as Row | undefined;
@@ -285,5 +364,7 @@ export async function resolveMediaForServing(key: string, actor: Actor | null): 
       return null;
     }
   }
-  return { key, mimeType: file.endsWith(".webp") ? "image/webp" : String(r.mime_type), isPrivate: Boolean(r.is_private) };
+  // Tour files are checked by the caller against the viewer's subscription.
+  const tour = (TOUR_MEDIA_TYPES as readonly string[]).includes(String(r.media_type));
+  return { key, mimeType: file.endsWith(".webp") ? "image/webp" : String(r.mime_type), isPrivate: Boolean(r.is_private), tourOfProperty: tour ? propertyId : null };
 }

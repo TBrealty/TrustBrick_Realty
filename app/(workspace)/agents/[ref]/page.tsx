@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { PersonSubscriptionsCard } from "@/components/subscriptions/PersonSubscriptionsCard";
+import { subscriptionsForPerson } from "@/lib/services/subscriptions";
 import { PartnerCommissionCard } from "@/components/workspace/PartnerCommissionCard";
 import { organizationForPerson } from "@/lib/services/commission";
 import Link from "next/link";
@@ -28,6 +30,7 @@ export default async function AgentPage({ params }: Props) {
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   });
+  const subscriptions = can(actor, "subscriptions.view", "platform") ? await subscriptionsForPerson(actor, agent.userId) : null;
   const partnerOrg = agent.status === "active" || agent.status === "suspended" ? await organizationForPerson(agent.userId) : null;
   const audit = can(actor, "audit.view", "platform") ? await auditTrailFor(actor, [agent.referenceId, agent.userReferenceId]) : null;
   const canVerify = can(actor, "agents.verify", "platform");
@@ -152,6 +155,7 @@ export default async function AgentPage({ params }: Props) {
           )}
         </div>
         <div className="space-y-6">
+          {subscriptions && <PersonSubscriptionsCard subs={subscriptions} canManage={can(actor, "subscriptions.manage", "platform")} />}
           {partnerOrg && <PartnerCommissionCard actor={actor} organization={partnerOrg} editable={partnerOrg.personal} />}
           {agent.openCaseReferenceId && (
             <Card title="Application">

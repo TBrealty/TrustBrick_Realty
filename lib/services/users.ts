@@ -10,6 +10,7 @@ import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { type RequestContext, audit } from "./audit";
 import { HOLD_REASONS, pauseListings, resumeListings } from "./listings/lifecycle";
 import { type Page, pageParams } from "./pagination";
+import { SUBSCRIPTION_FILTER, ownPlanColumn, pauseForSuspension, resumeAfterSuspension, subscriptionFilterSql } from "./subscriptions";
 
 type Row = Record<string, unknown>;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
@@ -20,6 +21,7 @@ export const userFilters = z.object({
   status: z.enum(["active", "suspended", "deactivated"]).optional().catch(undefined),
   kind: z.enum(["customer", "agent", "staff"]).optional().catch(undefined),
   verified: z.enum(["yes", "no"]).optional().catch(undefined),
+  subscription: SUBSCRIPTION_FILTER,
 });
 export type UserFilters = z.infer<typeof userFilters>;
 
@@ -36,6 +38,8 @@ export type UserRow = {
   agentReferenceId: string | null;
   createdAt: string;
   lastActiveAt: string | null;
+  /** Their own live subscription, if any. */
+  plan: { name: string; status: string } | null;
 };
 
 /** Never selects anything from accounts, sessions or verifications beyond timestamps. */
@@ -43,7 +47,8 @@ const USER_COLUMNS = sql`
   u.id, u.reference_id, u.name, u.email, u.email_verified, u.phone, u.status, u.intent, u.created_at,
   EXISTS (SELECT 1 FROM orgs.admin_profiles ad WHERE ad.user_id = u.id) AS is_staff,
   (SELECT ap.reference_id FROM orgs.agent_profiles ap WHERE ap.user_id = u.id) AS agent_reference_id,
-  (SELECT max(s.updated_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_active_at`;
+  (SELECT max(s.updated_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_active_at,
+  ${ownPlanColumn(sql`u.id`)}`;
 
 const toUserRow = (r: Row): UserRow => ({
   id: String(r.id),
@@ -58,6 +63,7 @@ const toUserRow = (r: Row): UserRow => ({
   agentReferenceId: (r.agent_reference_id as string) ?? null,
   createdAt: iso(r.created_at)!,
   lastActiveAt: iso(r.last_active_at),
+  plan: (r.own_plan as { name: string; status: string } | null) ?? null,
 });
 
 export async function listUsers(actor: Actor, filters: UserFilters, page: number): Promise<Page<UserRow>> {
@@ -76,6 +82,8 @@ export async function listUsers(actor: Actor, filters: UserFilters, page: number
     const like = `%${likeEscape(filters.q)}%`;
     where.push(sql`(u.reference_id = ${ref} OR u.name ILIKE ${like} OR u.email ILIKE ${like} OR u.phone LIKE ${like})`);
   }
+  const bySubscription = subscriptionFilterSql(filters.subscription, sql`u.id`);
+  if (bySubscription) where.push(bySubscription);
   const whereSql = sql.join(where, sql` AND `);
   const { limit, offset } = pageParams(page);
   const [rows, count] = await Promise.all([
@@ -173,7 +181,9 @@ export async function suspendUser(actor: Actor, referenceId: string, rawReason: 
     await tx.execute(sql`UPDATE identity.users SET status = 'suspended', status_reason = ${reason}, status_changed_at = now(), updated_at = now() WHERE id = ${user.id}`);
     await revokeSessions(tx, user.id);
     const paused = await pauseListings(tx, sql`la.agent_user_id = ${user.id}`, HOLD_REASONS.user, actor.userId);
-    await audit(tx, actor, { event: "USER_SUSPENDED", target: target(user), before: { status: "active" }, after: { status: "suspended" }, metadata: { reason, listingsPaused: paused } }, ctx);
+    // Their own subscription pauses too, with the time added back when they're reinstated.
+    const subscriptionPaused = await pauseForSuspension(tx, user.id, reason, actor.userId);
+    await audit(tx, actor, { event: "USER_SUSPENDED", target: target(user), before: { status: "active" }, after: { status: "suspended" }, metadata: { reason, listingsPaused: paused, subscriptionPaused } }, ctx);
     return { paused };
   });
 }
@@ -186,7 +196,8 @@ export async function reinstateUser(actor: Actor, referenceId: string, ctx: Requ
     if (user.status !== "suspended") throw conflict("Only suspended accounts can be reinstated.");
     await tx.execute(sql`UPDATE identity.users SET status = 'active', status_reason = NULL, status_changed_at = now(), updated_at = now() WHERE id = ${user.id}`);
     const resumed = await resumeListings(tx, sql`la.agent_user_id = ${user.id}`, actor.userId);
-    await audit(tx, actor, { event: "USER_REINSTATED", target: target(user), before: { status: "suspended" }, after: { status: "active" }, metadata: { listingsResumed: resumed } }, ctx);
+    const subscriptionResumed = await resumeAfterSuspension(tx, user.id, actor.userId);
+    await audit(tx, actor, { event: "USER_REINSTATED", target: target(user), before: { status: "suspended" }, after: { status: "active" }, metadata: { listingsResumed: resumed, subscriptionResumed } }, ctx);
     return { resumed };
   });
 }

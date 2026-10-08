@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmit, ConfirmAction } from "@/components/workspace/forms";
+import { PlanBadge } from "@/components/subscriptions/PlanBadge";
 import { ReferenceId } from "@/components/workspace/ReferenceId";
 import { ViewSummary } from "@/components/workspace/SummaryDialog";
 import { Card, DataTable, EmptyState, FilterSelect, PageHeader, Pagination, Status, When } from "@/components/workspace/ui";
@@ -75,6 +76,18 @@ export default async function AgentsPage({ searchParams }: Props) {
                 ["rejected", "Rejected"],
               ]}
             />
+            {can(actor, "subscriptions.view", "platform") && (
+              <FilterSelect
+                name="subscription"
+                label="Subscription"
+                value={filters.subscription}
+                options={[
+                  ["subscribed", "Subscribed"],
+                  ["paused", "Paused"],
+                  ["free", "Free"],
+                ]}
+              />
+            )}
             <FilterSelect
               name="sort"
               label="Sort"
@@ -105,8 +118,9 @@ export default async function AgentsPage({ searchParams }: Props) {
                   <Link href={`/agents/${r.referenceId}`} className="font-medium hover:underline">
                     {r.name}
                   </Link>
-                  <div>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <ReferenceId value={r.referenceId} copy={false} />
+                    {r.plan && <PlanBadge plan={r.plan} />}
                   </div>
                 </div>
               ),

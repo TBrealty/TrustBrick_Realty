@@ -429,6 +429,15 @@ export async function sendHostMessage(actor: Actor, referenceId: string, raw: un
     if (reason) throw new AppError("FORBIDDEN", reason);
     const { message, firstUnread } = await append(tx, r, "host", actor.userId, body);
     const ref = String(r.reference_id);
+    if (firstUnread) {
+      // In-app too (and so a push to the guest's phone), as the host gets for a guest's message.
+      await notify(tx, [String(r.guest_user_id)], {
+        type: "host_message",
+        title: `${firstName(r.host_name)} replied about ${r.title}`,
+        body: snippet(body),
+        link: `/account/messages/${ref}`,
+      });
+    }
     return {
       referenceId: ref,
       message,

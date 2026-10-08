@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ListingTourCard } from "@/components/tours/ListingTourCard";
 import { ListingActions } from "@/components/workspace/ListingActions";
 import { ListingCommissionCard } from "@/components/workspace/ListingCommissionCard";
 import { ListingOverview } from "@/components/workspace/ListingOverview";
@@ -17,6 +18,8 @@ import { auditTrailFor } from "@/lib/services/audit-log";
 import { latestListingForProperty } from "@/lib/services/listings/access";
 import { dealContextFor, listingCommission } from "@/lib/services/commission";
 import { getListingForActor } from "@/lib/services/listings/queries";
+import { tourDataForProperty } from "@/lib/services/tours";
+import { isLiveForTours } from "@/lib/tours/terms";
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<{ submitted?: string }> };
 
@@ -38,9 +41,14 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
     throw e;
   });
   const audit = can(actor, "audit.view", "platform") ? await auditTrailFor(actor, [listing.referenceId, listing.propertyReferenceId]) : null;
-  const openCase = listing.cases.find((c) => c.status === "open" || c.status === "in_review");
+  const reviews = listing.cases.filter((c) => c.caseType === "listing_review");
+  const openCase = reviews.find((c) => c.status === "open" || c.status === "in_review");
   const canEdit = actor.workspace === "professional" && can(actor, "listings.edit") && isEditable(listing.status);
-  const [deal, commission] = await Promise.all([["published", "paused"].includes(listing.status) ? dealContextFor(listing) : null, listingCommission(actor, listing)]);
+  const [deal, commission, tour] = await Promise.all([
+    ["published", "paused"].includes(listing.status) ? dealContextFor(listing) : null,
+    listingCommission(actor, listing),
+    tourDataForProperty(listing.propertyId),
+  ]);
 
   return (
     <>
@@ -77,9 +85,9 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
         </p>
       )}
       {listing.isSample && <SampleNotice>This listing is development sample data. It is not a real property.</SampleNotice>}
-      {listing.status === "published" && listing.cases[0]?.status === "approved" && listing.cases[0].decisionReason && (
+      {listing.status === "published" && reviews[0]?.status === "approved" && reviews[0].decisionReason && (
         <p className="mb-5 rounded-[3px] border-l-2 border-sage bg-sage/10 px-3.5 py-2.5 text-[0.8125rem] text-graphite">
-          <strong className="font-medium text-ink">Approved by Trustbrick:</strong> {listing.cases[0].decisionReason}
+          <strong className="font-medium text-ink">Approved by Trustbrick:</strong> {reviews[0].decisionReason}
         </p>
       )}
       {listing.statusReason && ["changes_requested", "rejected", "unpublished", "paused", "removed"].includes(listing.status) && (
@@ -104,6 +112,24 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
         <StatCard label="Saved by" value={listing.stats.saves} hint="customers" />
       </div>
 
+      <div className="mb-5">
+        <ListingTourCard
+          referenceId={listing.referenceId}
+          title={listing.title}
+          tour={tour}
+          stay={listing.purpose === "stay"}
+          mode={
+            actor.workspace !== "professional" || !can(actor, "listings.edit")
+              ? "view"
+              : isEditable(listing.status)
+                ? "draft"
+                : isLiveForTours(listing.status)
+                  ? "live"
+                  : "locked"
+          }
+        />
+      </div>
+
       {/* One box per step of the form: photos, location, amenities, details, pricing. */}
       <ListingOverview listing={listing} editHref={canEdit ? (step) => `/properties/${ref}/edit?step=${step}` : undefined} />
 
@@ -123,6 +149,7 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
                   <li key={k.referenceId} className="rounded-[3px] border border-line-light p-3 text-[0.8125rem]">
                     <div className="flex flex-wrap items-center gap-2">
                       <ReferenceId value={k.referenceId} href={can(actor, "listings.approve", "platform") || can(actor, "verification.view", "platform") ? `/approvals/${k.referenceId}` : undefined} />
+                      {k.caseType === "tour_review" && <span className="font-medium">Virtual tour</span>}
                       <Status value={k.status} />
                       <span className="text-stone-deep">{formatDay(k.createdAt)}</span>
                     </div>

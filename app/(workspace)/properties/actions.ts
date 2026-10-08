@@ -11,9 +11,10 @@ import { transitionListing } from "@/lib/services/listings/lifecycle";
 import { createDraft, updateAmenities, updateDetails, updateLocation, updatePricing } from "@/lib/services/listings/onboarding";
 import { resolveMapLink } from "@/lib/services/map-links";
 import { deleteListingMedia, reorderListingMedia, updateMediaAlt } from "@/lib/services/media";
+import { updateTourLink } from "@/lib/services/tours";
 
 type Result = ActionResult<unknown>;
-const paths = (ref: string) => [`/properties/${ref}`, `/properties/${ref}/edit`, "/properties", "/dashboard", "/approvals"];
+const paths = (ref: string) => [`/properties/${ref}`, `/properties/${ref}/edit`, `/properties/${ref}/tour`, `/listings/${ref}`, "/properties", "/dashboard", "/approvals"];
 
 /** Any listing status change. The action name is looked up server-side; the client can't name a status. */
 export async function transitionAction(_prev: Result | null, form: FormData): Promise<Result> {
@@ -128,4 +129,12 @@ export async function mediaAltAction(_prev: Result | null, form: FormData): Prom
 export async function reorderMediaAction(ref: string, orderedIds: string[]): Promise<Result> {
   if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== "string")) return { ok: false, code: "VALIDATION_ERROR", message: "Invalid order." };
   return runAction("listing.media.reorder", (actor) => reorderListingMedia(actor, ref, orderedIds), { revalidate: paths(ref) });
+}
+
+/** The hosted 3D tour link; an empty box removes it. */
+export async function saveTourLinkAction(_prev: Result | null, form: FormData): Promise<Result> {
+  const ref = text(form, "ref");
+  const result = await runAction("listing.tour_link", (actor) => updateTourLink(actor, ref, text(form, "tourUrl")), { revalidate: paths(ref) });
+  if (!result.ok) return result;
+  return { ok: true, message: result.data ? `Saved: the ${result.data.provider.name} tour is linked.` : "Tour link removed." };
 }

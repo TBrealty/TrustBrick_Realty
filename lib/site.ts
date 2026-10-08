@@ -36,6 +36,7 @@ export const footerNav = [
   { label: "Home Stay", href: "/stays" },
   { label: "Invest", href: "/invest" },
   { label: "Legal Verification", href: "/legal-verification" },
+  { label: "Plans", href: "/plans" },
   { label: "About", href: links.about },
   { label: "Contact us", href: links.contact },
 ] as const;

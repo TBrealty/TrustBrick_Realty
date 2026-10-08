@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { PersonSubscriptionsCard } from "@/components/subscriptions/PersonSubscriptionsCard";
 import { PartnerCommissionCard } from "@/components/workspace/PartnerCommissionCard";
 import { organizationForPerson } from "@/lib/services/commission";
+import { subscriptionsForPerson } from "@/lib/services/subscriptions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Checkbox, ConfirmAction } from "@/components/workspace/forms";
@@ -28,6 +30,7 @@ export default async function HostPage({ params }: Props) {
     throw e;
   });
   const partnerOrg = await organizationForPerson(host.userId);
+  const subscriptions = can(actor, "subscriptions.view", "platform") ? await subscriptionsForPerson(actor, host.userId) : null;
   const canVerify = can(actor, "hosts.verify", "platform");
   const canSuspend = can(actor, "hosts.suspend", "platform");
 
@@ -116,6 +119,7 @@ export default async function HostPage({ params }: Props) {
           </Card>
         </div>
         <div className="space-y-6">
+          {subscriptions && <PersonSubscriptionsCard subs={subscriptions} canManage={can(actor, "subscriptions.manage", "platform")} />}
           {partnerOrg && <PartnerCommissionCard actor={actor} organization={partnerOrg} />}
           <Card title={`Stays (${host.stays})`}>
             {host.listings.length === 0 ? (
