@@ -8,7 +8,12 @@ import { clientIp, limit, RULES, type RateLimitResult } from "@/lib/auth/rate-li
 import { safeRedirectPath } from "@/lib/auth/session";
 import { loadWorkspaces } from "@/lib/authz/actor";
 import { env } from "@/lib/env";
-import { type Field, type FormState, PENDING_EMAIL_COOKIE } from "@/lib/auth/form";
+import { type AgentFormState, type Field, type FormState, PENDING_EMAIL_COOKIE } from "@/lib/auth/form";
+import { sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { AppError } from "@/lib/errors";
+import { holdAgentSignup, parseAgentApplication } from "@/lib/services/agents";
+import { getSetting } from "@/lib/services/settings";
 import { ACCOUNT_INTENTS } from "@/lib/intents";
 import { PLANS_PROMO_COOKIE } from "@/lib/subscriptions/terms";
 
@@ -126,6 +131,67 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
     maxAge: 30 * 60,
   });
   redirect("/check-email");
+}
+
+// ── Sign up as an agent ───────────────────────────────────────────────────────
+
+/**
+ * Creates the account and keeps the agent application with it; the application is sent to
+ * Trustbrick's team when the email is confirmed (lib/auth/auth.ts, afterEmailVerification).
+ *
+ * Like plain sign-up, the result never reveals whether the email was registered already. If it
+ * was, the real owner gets the "you already have an account" email and nothing is attached to
+ * their account: they apply from /become-an-agent after logging in.
+ */
+export async function agentSignUpAction(_prev: AgentFormState, form: FormData): Promise<AgentFormState> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of form.entries()) if (typeof value === "string" && key !== "password" && !key.startsWith("$ACTION")) values[key] = value;
+
+  const account = signUpSchema.pick({ name: true, email: true, password: true }).safeParse({ name: values.name, email: values.email, password: text(form, "password") });
+  const application = Object.fromEntries(Object.entries(values).filter(([key]) => key !== "name" && key !== "email"));
+  let errors: Record<string, string> = account.success ? {} : { ...fieldErrors(account.error) };
+  try {
+    parseAgentApplication(application);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "VALIDATION_ERROR") throw error;
+    errors = { ...errors, ...error.fieldErrors };
+  }
+  if (!account.success || Object.keys(errors).length > 0) return { status: "error", message: "Please check the highlighted fields.", fieldErrors: errors, values };
+
+  if (!(await getSetting("agents.applications_open"))) {
+    return { status: "error", message: "We're not accepting new agent applications right now. You can still create an account and apply later.", values };
+  }
+  const ip = await clientIp();
+  const limited = await limit([{ key: `sign-up:ip:${ip}`, rule: RULES.signUpByIp }]);
+  if (limited.limited) return { status: "error", message: tooManyAttempts(limited).message, values };
+
+  const { name, email, password } = account.data;
+  const existing = await db.execute(sql`SELECT 1 FROM identity.users WHERE email = ${email}`);
+  try {
+    await auth.api.signUpEmail({ body: { name, email, password, callbackURL: "/become-an-agent?applied=1" }, headers: await headers() });
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "PASSWORD_TOO_SHORT" || code === "PASSWORD_TOO_LONG") {
+      return { status: "error", fieldErrors: { password: `Use between ${PASSWORD_MIN} and ${PASSWORD_MAX} characters.` }, values };
+    }
+    if (code === "TOO_MANY_REQUESTS") return { status: "error", message: "Too many attempts. Please wait and try again.", values };
+    console.error("[auth] agent sign-up failed", error);
+    return { ...somethingWentWrong, status: "error", values };
+  }
+  if (!existing.rows[0]) {
+    const created = await db.execute(sql`SELECT id FROM identity.users WHERE email = ${email}`);
+    const id = (created.rows[0] as { id: string } | undefined)?.id;
+    if (id) await holdAgentSignup(id, application);
+  }
+
+  (await cookies()).set(PENDING_EMAIL_COOKIE, email, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 30 * 60,
+  });
+  redirect("/check-email?as=agent");
 }
 
 // ── Log in ────────────────────────────────────────────────────────────────────

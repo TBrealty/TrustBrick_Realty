@@ -32,17 +32,19 @@ function FieldMessage({ id, error, hint }: { id: string; error?: string; hint?: 
 type TextFieldProps = {
   label: string;
   name: string;
-  type?: "text" | "email";
+  type?: "text" | "email" | "tel" | "url";
   autoComplete: string;
   defaultValue?: string;
   error?: string;
   hint?: React.ReactNode;
   required?: boolean;
   autoFocus?: boolean;
-  inputMode?: "text" | "email";
+  inputMode?: "text" | "email" | "tel" | "numeric" | "url";
+  placeholder?: string;
+  maxLength?: number;
 };
 
-export function TextField({ label, name, type = "text", autoComplete, defaultValue, error, hint, required = true, autoFocus, inputMode }: TextFieldProps) {
+export function TextField({ label, name, type = "text", autoComplete, defaultValue, error, hint, required = true, autoFocus, inputMode, placeholder, maxLength }: TextFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   return (
@@ -59,6 +61,8 @@ export function TextField({ label, name, type = "text", autoComplete, defaultVal
         defaultValue={defaultValue}
         required={required}
         autoFocus={autoFocus}
+        placeholder={placeholder}
+        maxLength={maxLength}
         spellCheck={false}
         aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? messageId : undefined}
@@ -66,6 +70,127 @@ export function TextField({ label, name, type = "text", autoComplete, defaultVal
       />
       <FieldMessage id={messageId} error={error} hint={hint} />
     </div>
+  );
+}
+
+/** "(optional)" after a label, for fields that aren't required. */
+const Optional = () => <span className="font-normal text-stone-deep"> (optional)</span>;
+
+export function SelectField({
+  label,
+  name,
+  options,
+  defaultValue,
+  error,
+  hint,
+  placeholder = "Choose",
+  required = true,
+}: {
+  label: string;
+  name: string;
+  options: { value: string; label: string }[];
+  defaultValue?: string;
+  error?: string;
+  hint?: React.ReactNode;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const id = useId();
+  const messageId = `${id}-message`;
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-[0.8125rem] font-medium text-ink">
+        {label}
+        {!required && <Optional />}
+      </label>
+      <select
+        id={id}
+        name={name}
+        defaultValue={defaultValue ?? ""}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? messageId : undefined}
+        className={`${inputClass} appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10 ${error ? "border-brick" : "border-line-light"}`}
+        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b655a' stroke-width='1.6'/%3E%3C/svg%3E\")" }}
+      >
+        <option value="" disabled={required}>
+          {placeholder}
+        </option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <FieldMessage id={messageId} error={error} hint={hint} />
+    </div>
+  );
+}
+
+export function TextAreaField({ label, name, defaultValue, error, hint, rows = 3, maxLength, required = true }: { label: string; name: string; defaultValue?: string; error?: string; hint?: React.ReactNode; rows?: number; maxLength?: number; required?: boolean }) {
+  const id = useId();
+  const messageId = `${id}-message`;
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-[0.8125rem] font-medium text-ink">
+        {label}
+        {!required && <Optional />}
+      </label>
+      <textarea
+        id={id}
+        name={name}
+        rows={rows}
+        maxLength={maxLength}
+        defaultValue={defaultValue}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? messageId : undefined}
+        className={`${inputClass} h-auto py-3 leading-relaxed ${error ? "border-brick" : "border-line-light"}`}
+      />
+      <FieldMessage id={messageId} error={error} hint={hint} />
+    </div>
+  );
+}
+
+/** Large radio cards for a choice that changes the rest of the form. Works with the keyboard and without JavaScript. */
+export function ChoiceCards({
+  legend,
+  name,
+  options,
+  value,
+  onChange,
+  error,
+}: {
+  legend: string;
+  name: string;
+  options: { value: string; title: string; description: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  const id = useId();
+  return (
+    <fieldset aria-describedby={error ? `${id}-message` : undefined}>
+      <legend className="mb-3 block text-[0.8125rem] font-medium text-ink">{legend}</legend>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {options.map((option) => (
+          <label
+            key={option.value}
+            className="relative flex cursor-pointer flex-col gap-1 rounded-[2px] border border-line-light bg-paper p-4 transition-colors duration-200 hover:border-ink/40 has-checked:border-ink has-checked:shadow-[inset_0_0_0_1px_var(--ink)] has-focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--brick-bright)_35%,transparent)]"
+          >
+            <input type="radio" name={name} value={option.value} checked={value === option.value} onChange={() => onChange(option.value)} className="sr-only" />
+            <span className="flex items-center gap-2.5 text-[0.9375rem] font-medium text-ink">
+              <span aria-hidden className={`grid size-4 place-items-center rounded-full border ${value === option.value ? "border-ink" : "border-stone"}`}>
+                {value === option.value && <span className="size-2 rounded-full bg-ink" />}
+              </span>
+              {option.title}
+            </span>
+            <span className="pl-[1.625rem] text-[0.8125rem] leading-snug text-stone-deep">{option.description}</span>
+          </label>
+        ))}
+      </div>
+      {error && <FieldMessage id={`${id}-message`} error={error} />}
+    </fieldset>
   );
 }
 

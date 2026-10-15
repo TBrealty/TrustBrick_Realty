@@ -20,6 +20,7 @@ export const NOTIFICATION_TYPES = {
   listing_submitted: "A listing is waiting for review",
   tour_changed: "A virtual tour on a live listing is changed and waiting for review",
   tour_decision: "A virtual tour of yours is reviewed",
+  tour_capture: "A 360° photo you took with the app is ready, or couldn't be made",
   report_submitted: "A listing is reported",
   organization_pending: "An organization needs verification",
   admin_invited: "An administrator is invited",

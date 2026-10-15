@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 import type { ColorValue } from "react-native";
 import { useSession } from "@/auth/session";
-import { fonts, useColors } from "@/theme";
+import { FloatingTabBar } from "@/components/tab-bar";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 function icon(name: IconName, active: IconName) {
@@ -11,23 +11,14 @@ function icon(name: IconName, active: IconName) {
   };
 }
 
-/** Explore, Saved, Messages, Alerts and Account, as tabs along the bottom. */
+/** Home, Saved, Messages, Alerts and Account, on a tab bar floating above the content. */
 export default function TabsLayout() {
-  const c = useColors();
   const { me, mode } = useSession();
   // Partner mode opens on its own tabs; switching back to customer mode returns here.
   if (mode === "partner") return <Redirect href="/today" />;
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: c.brick,
-        tabBarInactiveTintColor: c.muted,
-        tabBarStyle: { backgroundColor: c.surface, borderTopColor: c.line },
-        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11 },
-      }}
-    >
-      <Tabs.Screen name="index" options={{ title: "Explore", tabBarIcon: icon("search-outline", "search") }} />
+    <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false, animation: "shift" }}>
+      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: icon("home-outline", "home") }} />
       <Tabs.Screen name="saved" options={{ title: "Saved", tabBarIcon: icon("heart-outline", "heart") }} />
       <Tabs.Screen
         name="messages"

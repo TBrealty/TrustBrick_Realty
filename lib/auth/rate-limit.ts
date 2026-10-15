@@ -37,6 +37,9 @@ export const RULES = {
   legalByIp: { max: 5, windowSeconds: 60 * 60 },
   legalByEmail: { max: 3, windowSeconds: 24 * 60 * 60 },
   uploadByUser: { max: 120, windowSeconds: 60 * 60 },
+  // A room taken with the app's guided camera is about 30 photos.
+  captureByUser: { max: 30, windowSeconds: 60 * 60 },
+  captureShotByUser: { max: 1200, windowSeconds: 60 * 60 },
   mapLinkByUser: { max: 60, windowSeconds: 10 * 60 },
 } satisfies Record<string, Rule>;
 

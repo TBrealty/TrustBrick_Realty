@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/navigation/AppHeader";
-import { AgentApplicationForm } from "@/components/workspace/AgentApplicationForm";
-import { requireSession } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { AgentForm } from "@/components/auth/AgentForm";
+import { getSession } from "@/lib/auth/session";
 import { loadWorkspaces } from "@/lib/authz/actor";
 import { agentApplicationFor } from "@/lib/services/agents";
 import { cityOptions } from "@/lib/services/organizations";
 import { getSetting } from "@/lib/services/settings";
+import { applyAsAgentFormAction } from "./actions";
 
 export const metadata: Metadata = { title: "Become an agent · Trustbrick", robots: { index: false } };
 
-export default async function BecomeAnAgentPage() {
-  const session = await requireSession("/become-an-agent");
+export default async function BecomeAnAgentPage({ searchParams }: { searchParams: Promise<{ applied?: string }> }) {
+  // Signed out: becoming an agent starts with an account (the sign-up page's agent form).
+  const session = await getSession();
+  if (!session) redirect("/signup?as=agent");
+  const { applied } = await searchParams;
   const [application, open, cities, workspaces] = await Promise.all([
     agentApplicationFor(session.user.id),
     getSetting("agents.applications_open"),
@@ -36,9 +41,14 @@ export default async function BecomeAnAgentPage() {
         </p>
 
         <section className="mt-10 border border-line-light bg-paper p-6 sm:p-8">
+          {applied && application.state === "pending" && (
+            <p role="status" className="mb-5 border-l-2 border-sage bg-sage/10 px-4 py-3 text-[0.9375rem]">
+              Application sent. We&apos;ll email you when it&apos;s decided.
+            </p>
+          )}
           {application.state === "pending" && (
             <Notice title="Your application is being reviewed">
-              Reference <span className="font-mono">{application.referenceId}</span>. We&apos;ll notify you when it&apos;s decided.
+              Reference <span className="font-mono">{application.referenceId}</span>. A Trustbrick admin reviews it, usually within two working days, and we&apos;ll email you the decision.
             </Notice>
           )}
           {application.state === "active" && (
@@ -63,7 +73,9 @@ export default async function BecomeAnAgentPage() {
                 )}
                 <h2 className="text-[1.25rem] font-semibold">Apply</h2>
                 <p className="mt-1 text-[0.875rem] text-stone-deep">Applying as {session.user.email}.</p>
-                <AgentApplicationForm cities={cities} />
+                <div className="mt-6">
+                  <AgentForm action={applyAsAgentFormAction} cities={cities} withAccount={false} />
+                </div>
               </>
             ) : (
               <Notice title="Applications are paused">We&apos;re not accepting new agent applications right now. Please check back soon.</Notice>

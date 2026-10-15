@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useSyncExternalStore } from "react";
 import type { ListingKind, Sort } from "@/lib/listings/filters";
 
@@ -78,4 +79,15 @@ export function activeFilters(s: SearchState): number {
     Number(s.tour) +
     Number(s.sort !== "newest")
   );
+}
+
+/**
+ * Opens the search screen on a fresh search (a kind of place, optionally a city, a 3D-tour filter
+ * or a query), or on a saved one, e.g. "Continue your search".
+ */
+export function openSearch(start: Partial<SearchState> & { focus?: boolean } = {}) {
+  const { focus, ...patch } = start;
+  state = { ...state, q: "", ...EMPTY_FILTERS, ...patch };
+  listeners.forEach((l) => l());
+  router.push(focus ? "/search?focus=1" : "/search");
 }

@@ -339,7 +339,7 @@ Sample rows carry `is_sample` / `source = 'sample'` so they can never be mistake
 | `/account/profile` | Signed-in users only. Your name, email, what you're looking for and when you joined. `/account` opens this page |
 | `/account/bookmarks` | Signed-in users only. Your saved properties; un-saving removes the card |
 | `/welcome` | Where email confirmation links land. Sends you to your profile, or to login with an explanation if the link expired |
-| `/become-an-agent` | Signed-in customers apply to be agents; an admin reviews the application |
+| `/become-an-agent` | Signed-in customers apply to be agents (individually or through an organization); an admin reviews the application. Signed out, it goes to `/signup?as=agent` |
 | `/invite/[token]` | Accept an admin or agent invitation (one-time link, valid 72 hours) |
 | `/account/trips` | Your homestay requests and bookings; the address appears once a booking is confirmed |
 | `/account/messages` | Your conversations with hosts, kept for good; ask a question before you book |
@@ -545,6 +545,10 @@ services, so every rule, permission, rate limit and audit entry is shared.
 - **Push notifications**: phones register their Expo push token (`platform.push_devices`, tied to
   the app session). Every in-app notification is also pushed after the request that created it
   commits (`lib/services/push.ts`; `PUSH_DRIVER`), and `POST /api/internal/push` retries leftovers.
+- **360° photos from a phone**: the app's guided camera takes about 30 photos of a room with where
+  the phone pointed; `lib/services/tour-captures.ts` collects them (`/api/v1/partner/captures/…`)
+  and the stitching service (`stitcher/`, Hugin in Docker: `npm run stitcher:up`) joins them into
+  a 360° photo, added to the tour like an uploaded one.
 - **The app** has a customer side (browse, tours, stays, saved homes, messages, alerts, plans) and a
   partner mode for agents and hosts (today's work, leads and visits, bookings, the guest inbox, and
   recording a listing's virtual tour on site, with uploads that wait for signal). Partner endpoints
@@ -607,8 +611,18 @@ professional workspace; they have no self-service signup yet.
 
 1. **Creating agents.** An admin adds an agent at `/agents/new` (or from an organization's page): details, the
    organization they work for (or independent), agent or broker admin, and whether they're verified. The agent gets
-   an email link, sets a password, and lands in their workspace. Customers can also apply at `/become-an-agent`; an
-   admin approves (optionally marking them verified) or rejects with a reason.
+   an email link, sets a password, and lands in their workspace.
+
+   Anyone can also **become an agent** themselves: *Become an agent* on the sign-up page (`/signup?as=agent`, also
+   linked from log-in), or `/become-an-agent` when already signed in. They apply as an **individual**, or **through
+   an organization**: joining one already on Trustbrick (its `ORG-` reference) or **registering a new one** (name,
+   kind, GSTIN checked for typos with its checksum, office address, RERA, contacts; one live organization per GSTIN).
+   A new organization is created *pending* with the application. When signing up, the application is held until
+   the email is confirmed, then sent (Better Auth's `afterEmailVerification`). Admins get a notification and review
+   it under **Approvals → Agent applications** (`/agents/[ref]` shows the organization's details). Approving makes
+   the person an agent, and a registered organization goes live with them as its admin (broker, developer or
+   property-manager admin, by kind); rejecting needs a reason, rejects the new organization too, and they can correct
+   and reapply. Either way they get an **email** with the decision (`lib/services/agents.ts`).
 2. **Onboarding a property.** *Onboard property* asks for the purpose (sell, rent, lease, PG), category, type and
    location, and creates a **draft** straight away (`PRP-` property, `LST-` listing). Details, pricing, amenities,
    photos, floor plans, videos and private documents are then filled in step by step, saved as you go. Only fields

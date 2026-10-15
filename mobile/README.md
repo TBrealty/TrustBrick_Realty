@@ -32,10 +32,21 @@ remembers the choice; the tabs follow the person's role, as the website's worksp
 | **Inbox** (hosts) | Guest conversations |
 | **Listings** | The workspace's listings with their status and tour; each opens to its virtual tour editor |
 
-**Recording a tour on site.** On a listing: **Add 360° photos** (from the gallery: take them with a
-360° camera's app, e.g. Insta360 or RICOH THETA, or a 360° photo app) and **Add a 3D model**
-(`.glb`), or paste a hosted tour link. Rooms can be renamed, reordered and removed. The app checks a
-photo is a 2:1 panorama before sending it.
+**Recording a tour on site.** On a listing:
+- **Take a 360° photo of a room** with this phone (`src/app/partner/capture/[ref].tsx`). Name the
+  room, stand in the middle, and follow the dot: line it up in the circle and hold still, and the
+  photo takes itself (about 30: round at eye level, above, below, the ceiling and the floor). The
+  motion sensor says where the phone points (`src/capture/geometry.ts`). The photos are sent to
+  Trustbrick, which joins them into one 360° photo in a minute or two (the stitching service,
+  `stitcher/`) and adds it to the tour; the editor shows "Making the 360° photo…" until it's there,
+  and a notification says when it's ready.
+- **Add from a 360° camera** (Insta360, RICOH THETA…): its equirectangular photos, from the gallery.
+  The app checks each is a 2:1 panorama before sending it.
+- **More ways to show the home**: a **3D model** (`.glb`; *How to make one* explains scanning with
+  an iPhone Pro, photo-scanning apps, or getting it from the architect) and a **hosted tour link**
+  (Matterport, Kuula, CloudPano) for agents who already have one.
+
+Rooms can be renamed, reordered and removed.
 
 Picked files are copied into the app's storage and uploaded one at a time with progress
 (`src/uploads/queue.ts`). With no signal they wait, survive the app closing, and go up when the app
@@ -51,7 +62,30 @@ Start the database and the website first, from the repository root (`npm run db:
 `npm run dev`): the app gets everything from the website's API. Sign in with any website account,
 e.g. the seeded `@trustbrick.test` ones.
 
-### Development build (recommended)
+### Installed on the phone, updated over the cable (everyday use)
+
+The app with its code inside it (a release build), so it opens quickly and needs nothing from the
+dev server. The phone, on the USB cable, gets its data from the website on this computer.
+
+```bash
+npm run phone:update
+```
+
+That prepares the Android project, builds the app, installs it over the cable and opens it. The first
+build takes 15–20 minutes; after that, run the same command after any change to update the app on
+the phone (your sign-in and saved data stay). It also forwards the website to the phone, so keep
+`npm run dev` running at the repository root.
+
+- `npm run phone:connect`: after re-plugging the cable (or restarting the computer), forward the
+  website to the phone again; the installed app needs it for its data.
+- `npm run phone:dev`: switch back to the development build below, for live reload while working
+  on the design.
+
+This build talks to the website over plain `http://localhost:3000`, which release builds refuse by
+default; `app.config.ts` allows it only when the script sets `TRUSTBRICK_LOCAL_RELEASE=1`. Store
+builds never set it and stay https-only.
+
+### Development build (live reload)
 
 The app's own installable copy (`expo-dev-client`), with push notifications. It's built once;
 after that it loads the code from your computer and reloads as you edit, like Expo Go. Rebuild

@@ -52,6 +52,13 @@ export default async function LoginPage({ searchParams }: Props) {
 
       {/* Only pass `next` through when it is a real destination, never the default. */}
       <SignInForm next={params.next ? next : undefined} />
+
+      <p className="mt-8 border-t border-line-light pt-6 text-[0.9375rem] text-graphite">
+        Are you a real estate agent?{" "}
+        <Link href="/signup?as=agent" className="link-rule font-medium text-ink">
+          Become an agent
+        </Link>
+      </p>
     </>
   );
 }

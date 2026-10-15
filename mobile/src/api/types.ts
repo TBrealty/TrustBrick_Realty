@@ -262,4 +262,8 @@ export type PartnerListing = {
   };
   tourMode: TourMode;
   tourReviewWaiting: boolean;
+  /** 360° photos taken with the guided camera that are still being made, or that failed. */
+  captures: PartnerCapture[];
 };
+
+export type PartnerCapture = { id: string; roomName: string; status: "uploading" | "queued" | "stitching" | "done" | "failed"; error: string | null; shots: number; shotCount: number; createdAt: string };

@@ -25,5 +25,16 @@ services:
       timeout: 3s
       retries: 30
 
+  # Joins agents' guided phone photos into 360° panoramas (stitcher/README.md). Opt-in, so
+  # `npm run db:up` stays quick: start it with `npm run stitcher:up`.
+  stitcher:
+    profiles: ["stitcher"]
+    build: ./stitcher
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${TRUSTBRICK_STITCHER_PORT:-8090}:8090"
+    # Joining 30 photos needs most of a gigabyte for a minute or two.
+    mem_limit: 2g
+
 volumes:
   trustbrick-pgdata:

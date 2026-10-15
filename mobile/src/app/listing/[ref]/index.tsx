@@ -1,20 +1,60 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { Stack, router, useLocalSearchParams } from "expo-router";
-import { ScrollView, Share, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect } from "react";
+import { Share, Text, View } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/api/client";
 import type { ListingDetail } from "@/api/types";
 import { useSession } from "@/auth/session";
 import { PhotoCarousel } from "@/components/photo-carousel";
-import { Badge, Body, Button, Card, Chip, Display, ErrorState, Eyebrow, Fact, IconButton, Loading, Small, Title } from "@/components/ui";
+import { PressableScale, Skeleton, enter, thud } from "@/components/motion";
+import { Badge, Body, Button, Card, Chip, Display, ErrorState, Eyebrow, Fact, Small, Title } from "@/components/ui";
 import { API_ORIGIN } from "@/config";
+import { rememberViewed } from "@/hooks/use-home";
 import { useSave } from "@/hooks/use-save";
 import { formatArea, formatDate, formatPrice, titleCase } from "@/lib/format";
 import { FURNISHING_LABEL, OCCUPANCY_LABEL, keyFacts, priceParts } from "@/lib/listings/describe";
 import { CANCELLATION_LABELS, SPACE_TYPE_LABELS, nightsLabel, timeLabel } from "@/lib/stays/labels";
 import { describeTour } from "@/lib/tours/terms";
-import { fonts, useColors } from "@/theme";
+import { fonts, radius, shadow, useColors } from "@/theme";
+
+const HERO = 380;
+
+/** A round button over the photo (back, share, save). */
+function HeaderButton({ icon, label, onPress, tone }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; tone?: string }) {
+  const c = useColors();
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={6}
+      scaleTo={0.9}
+      onPress={onPress}
+      style={[{ width: 42, height: 42, borderRadius: 21, backgroundColor: c.surface, alignItems: "center", justifyContent: "center" }, shadow.soft]}
+    >
+      <Ionicons name={icon} size={20} color={tone ?? c.text} />
+    </PressableScale>
+  );
+}
+
+/** The page's shape while it loads. */
+function ListingSkeleton() {
+  const c = useColors();
+  return (
+    <View style={{ flex: 1, backgroundColor: c.background }}>
+      <Skeleton height={HERO} rounded={0} />
+      <View style={{ padding: 20, gap: 14 }}>
+        <Skeleton width="35%" height={12} />
+        <Skeleton width="85%" height={30} />
+        <Skeleton width="55%" height={16} />
+        <Skeleton width="40%" height={34} />
+        <Skeleton height={120} rounded={radius.xl} />
+      </View>
+    </View>
+  );
+}
 
 /** One listing, as the website's listing page shows it, with the next step pinned to the bottom. */
 export default function ListingScreen() {
@@ -22,9 +62,24 @@ export default function ListingScreen() {
   const c = useColors();
   const { status } = useSession();
   const toggleSave = useSave();
+  const insets = useSafeAreaInsets();
   const listing = useQuery({ queryKey: ["listing", ref], queryFn: () => api<ListingDetail>(`/listings/${ref}`) });
 
-  if (listing.isPending) return <Loading />;
+  // The photo drifts slower than the page (and stretches when pulled down); the header fades in as the photo leaves.
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+  const hero = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value > 0 ? scrollY.value * 0.45 : scrollY.value / 2 }, { scale: scrollY.value < 0 ? 1 - scrollY.value / HERO : 1 }],
+  }));
+  const bar = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.value, [HERO - 170, HERO - 90], [0, 1], Extrapolation.CLAMP) }));
+
+  useEffect(() => {
+    if (listing.data) rememberViewed(listing.data);
+  }, [listing.data]);
+
+  if (listing.isPending) return <ListingSkeleton />;
   if (listing.isError) return <ErrorState error={listing.error} onRetry={() => listing.refetch()} />;
   const l = listing.data;
   const price = priceParts(l);
@@ -56,26 +111,16 @@ export default function ListingScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <IconButton icon="share-outline" label="Share" onPress={() => Share.share({ message: `${l.title}\n${API_ORIGIN}/listings/${l.referenceId}` })} />
-              <IconButton
-                icon={l.saved ? "heart" : "heart-outline"}
-                tone={l.saved ? c.brick : undefined}
-                label={l.saved ? "Remove from saved homes" : "Save this home"}
-                onPress={() => toggleSave(l.referenceId, !l.saved)}
-              />
-            </View>
-          ),
-        }}
-      />
       <View style={{ flex: 1 }}>
         <View style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-            <PhotoCarousel images={l.images} />
-            <View style={{ padding: 16, gap: 18 }}>
+          <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+            <Animated.View style={[{ height: HERO }, hero]}>
+              <PhotoCarousel images={l.images} height={HERO} />
+            </Animated.View>
+            <Animated.View
+              entering={enter(0)}
+              style={{ marginTop: -28, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, backgroundColor: c.background, paddingHorizontal: 20, paddingTop: 24, gap: 22 }}
+            >
               {l.isSample && <Badge label="Sample listing: not a real property" tone="contrast" />}
               <View style={{ gap: 6 }}>
                 <Eyebrow>
@@ -211,12 +256,38 @@ export default function ListingScreen() {
               <Small>
                 Listed by {l.organizationName} · Listing ID {l.referenceId}
               </Small>
+            </Animated.View>
+          </Animated.ScrollView>
+
+          {/* The header: buttons over the photo, then a bar with the title once the photo scrolls away */}
+          <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top + 6, paddingHorizontal: 14, paddingBottom: 10 }}>
+            <Animated.View
+              pointerEvents="none"
+              style={[{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.background, borderBottomWidth: 1, borderBottomColor: c.line }, bar]}
+            />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <HeaderButton icon="arrow-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
+              <Animated.View style={[{ flex: 1 }, bar]}>
+                <Text numberOfLines={1} style={{ fontFamily: fonts.semibold, fontSize: 16, color: c.text }}>
+                  {l.title}
+                </Text>
+              </Animated.View>
+              <HeaderButton icon="share-outline" label="Share" onPress={() => Share.share({ message: `${l.title}\n${API_ORIGIN}/listings/${l.referenceId}` })} />
+              <HeaderButton
+                icon={l.saved ? "heart" : "heart-outline"}
+                tone={l.saved ? c.brick : undefined}
+                label={l.saved ? "Remove from saved homes" : "Save this home"}
+                onPress={() => {
+                  thud();
+                  toggleSave(l.referenceId, !l.saved);
+                }}
+              />
             </View>
-          </ScrollView>
+          </View>
         </View>
         {l.status === "published" && (
-          <SafeAreaView edges={["bottom"]} style={{ borderTopWidth: 1, borderTopColor: c.line, backgroundColor: c.background }}>
-            <View style={{ flexDirection: "row", gap: 10, padding: 12 }}>
+          <SafeAreaView edges={["bottom"]} style={[{ borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, backgroundColor: c.surface }, shadow.float]}>
+            <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
               {stay ? (
                 <>
                   <Button label="Message host" variant="secondary" icon="chatbubble-outline" style={{ flex: 1 }} onPress={() => needsSignIn(() => router.push(`/conversation/new?listing=${l.referenceId}`))} />

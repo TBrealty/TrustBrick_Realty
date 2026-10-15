@@ -183,6 +183,20 @@
       "when": 1791352639467,
       "tag": "0025_push_device_session",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791780619832,
+      "tag": "0026_agent_signup",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791786543476,
+      "tag": "0027_tour_captures",
+      "breakpoints": true
     }
   ]
 }

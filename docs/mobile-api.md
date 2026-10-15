@@ -144,6 +144,21 @@ tours), `locked` (the tour was hidden; it stays hidden until an admin approves a
 | `PUT /partner/listings/{ref}/media-order` | user | `{ ids[] }`: the room order (the first opens the tour) |
 | `PUT /partner/listings/{ref}/tour-link` | user | `{ url }` (Matterport, Kuula…), or `""` to remove it |
 
+**360° photos from the guided camera.** The app takes about 30 photos of a room, with the
+direction the phone pointed for each (degrees: yaw turns right from the first photo, pitch is up
+from the horizon), and the server joins them into one 360° photo (stitcher/README.md).
+
+| Method and path | Auth | Body → result |
+| --- | --- | --- |
+| `POST /partner/listings/{ref}/captures` | user | `{ roomName, hfov, shotCount }` (12–60 photos) → `201 { id }`. Refused when the tour can't change now, or is full |
+| `PUT /partner/captures/{id}/shots/{index}?yaw=&pitch=&roll=` | user | The JPEG as the body → `{ received, of }`. Sending an index again replaces it |
+| `POST /partner/captures/{id}/finish` | user | → the capture, `queued`. It's stitched in the background (a minute or two), added to the tour under the room's name, and the agent is notified (`tour_capture`) |
+| `DELETE /partner/captures/{id}` | user | Discards one still uploading, or one that failed |
+
+`GET /partner/listings/{ref}` lists `captures` still being made (`queued`, `stitching`) or failed in
+the last day. Stitching is retried if the service was unreachable, and gives up (`failed`, with a
+reason) when the photos can't be joined.
+
 Uploads are rate-limited per person. The app sends the raw file so a phone can upload in the
 background and resume after losing signal.
 

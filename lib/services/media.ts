@@ -55,6 +55,9 @@ function changeMode(status: ListingStatus, kinds: UploadKind[]): "draft" | "live
   throw conflict(tourOnly ? "The tour can't be changed while the listing is being reviewed." : "Withdraw the listing before changing its media.");
 }
 
+/** Throws unless the listing's tour can be changed now (for work that ends in adding a tour file). */
+export const assertTourChangeable = (status: ListingStatus) => void changeMode(status, ["panorama"]);
+
 const roomLabel = (alt: string | null) => (alt ? `“${alt}”` : "an unnamed room");
 
 /** URL for a stored object: sample media live in /public, uploads are served by /media/… */

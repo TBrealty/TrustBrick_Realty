@@ -81,3 +81,8 @@ export function useUploads(listingRef: string): QueuedUpload[] {
   );
   return all.filter((i) => i.listingRef === listingRef);
 }
+
+/** The guided camera isn't offered in the web preview. */
+export async function enqueueCapture(_listingRef: string, _capture: { roomName: string; hfov: number; shots: unknown[]; folder: string }) {
+  throw new Error("Taking 360° photos needs the phone app.");
+}

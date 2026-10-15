@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { Link } from "expo-router";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
+import { router } from "expo-router";
+import { FlatList, RefreshControl, View } from "react-native";
 import { api, assetUrl } from "@/api/client";
 import type { ConversationSummary } from "@/api/types";
 import { useSession } from "@/auth/session";
 import { SignedOut } from "@/components/signed-out";
+import Animated from "react-native-reanimated";
+import { PressableScale, enter } from "@/components/motion";
+import { useTabBarSpace } from "@/components/tab-bar";
 import { Badge, Body, Display, EmptyState, ErrorState, Loading, Screen, Small } from "@/components/ui";
 import { relativeTime } from "@/lib/format";
 import { fonts, radius, useColors } from "@/theme";
@@ -13,6 +16,7 @@ import { fonts, radius, useColors } from "@/theme";
 /** Conversations with stay hosts, newest first. */
 export default function Messages() {
   const c = useColors();
+  const space = useTabBarSpace();
   const { status, refreshMe } = useSession();
   const list = useQuery({
     queryKey: ["conversations"],
@@ -38,7 +42,7 @@ export default function Messages() {
         <FlatList
           data={list.data.items}
           keyExtractor={(i) => i.referenceId}
-          contentContainerStyle={{ padding: 16, gap: 4, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 4, flexGrow: 1, paddingBottom: space }}
           refreshControl={
             <RefreshControl
               refreshing={list.isRefetching}
@@ -49,10 +53,10 @@ export default function Messages() {
               tintColor={c.brick}
             />
           }
-          renderItem={({ item }) => (
-            <Link href={`/conversation/${item.referenceId}`} asChild>
-              <Pressable accessibilityRole="link" style={({ pressed }) => ({ flexDirection: "row", gap: 12, paddingVertical: 12, opacity: pressed ? 0.7 : 1 })}>
-                <Image source={{ uri: assetUrl(item.listing.image) }} style={{ width: 56, height: 56, borderRadius: radius.md, backgroundColor: c.sand }} contentFit="cover" />
+          renderItem={({ item, index }) => (
+            <Animated.View entering={enter(index, 40)}>
+              <PressableScale accessibilityRole="link" scaleTo={0.98} onPress={() => router.push(`/conversation/${item.referenceId}`)} style={{ flexDirection: "row", gap: 12, paddingVertical: 12 }}>
+                <Image source={{ uri: assetUrl(item.listing.image) }} style={{ width: 56, height: 56, borderRadius: radius.lg, backgroundColor: c.sand }} contentFit="cover" />
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
                     <Body style={{ fontFamily: item.unread ? fonts.semibold : fonts.medium, flex: 1 }} numberOfLines={1}>
@@ -67,8 +71,8 @@ export default function Messages() {
                     {item.unread > 0 && <Badge label={String(item.unread)} tone="danger" />}
                   </View>
                 </View>
-              </Pressable>
-            </Link>
+              </PressableScale>
+            </Animated.View>
           )}
           ListEmptyComponent={
             <EmptyState icon="chatbubbles-outline" title="No messages yet">

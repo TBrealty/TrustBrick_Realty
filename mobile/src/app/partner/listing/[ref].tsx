@@ -71,8 +71,14 @@ export default function PartnerListingScreen() {
   const { ref } = useLocalSearchParams<{ ref: string }>();
   const c = useColors();
   const queryClient = useQueryClient();
-  const listing = useQuery({ queryKey: ["partner-listing", ref], queryFn: () => api<PartnerListing>(`/partner/listings/${ref}`) });
   const uploads = useUploads(ref);
+  const [more, setMore] = useState(false);
+  const listing = useQuery({
+    queryKey: ["partner-listing", ref],
+    queryFn: () => api<PartnerListing>(`/partner/listings/${ref}`),
+    // While a 360° photo is being made, look again every few seconds.
+    refetchInterval: (q) => (q.state.data?.captures.some((x) => x.status === "queued" || x.status === "stitching") ? 6000 : false),
+  });
   const [notice, setNotice] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const refresh = () => {
@@ -84,6 +90,7 @@ export default function PartnerListingScreen() {
   const order = useMutation({ mutationFn: (ids: string[]) => api(`/partner/listings/${ref}/media-order`, { method: "PUT", body: { ids } }), onSuccess: refresh });
   const saveLink = useMutation({ mutationFn: (url: string) => api(`/partner/listings/${ref}/tour-link`, { method: "PUT", body: { url } }), onSuccess: refresh });
   const removeModel = useMutation({ mutationFn: (id: string) => api(`/partner/listings/${ref}/media/${id}`, { method: "DELETE" }), onSuccess: refresh });
+  const dismissCapture = useMutation({ mutationFn: (id: string) => api(`/partner/captures/${id}`, { method: "DELETE" }), onSuccess: refresh });
 
   if (listing.isPending) return <Loading />;
   if (listing.isError) return <ErrorState error={listing.error} onRetry={() => listing.refetch()} />;
@@ -167,19 +174,46 @@ export default function PartnerListingScreen() {
         </Small>
 
         <Title style={{ marginTop: 6 }}>360° rooms {rooms.length ? `(${rooms.length})` : ""}</Title>
-        {rooms.length === 0 && uploads.filter((u) => u.kind === "panorama").length === 0 && <Small>No rooms yet.</Small>}
+        {rooms.length === 0 && uploads.filter((u) => u.kind !== "model_3d").length === 0 && l.captures.length === 0 && <Small>No rooms yet.</Small>}
         {rooms.map((room, i) => (
           <RoomRow key={room.id} room={room} index={i} count={rooms.length} listingRef={ref} editable={editable} onChanged={(dir) => (dir ? move(i, dir) : refresh())} />
         ))}
+
+        {l.captures
+          .filter((x) => x.status !== "uploading")
+          .map((x) => (
+            <View key={x.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}>
+              <View style={{ width: 96, height: 48, borderRadius: radius.sm, backgroundColor: x.status === "failed" ? c.brickSoft : c.sand, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name={x.status === "failed" ? "alert-circle-outline" : "sync-outline"} size={20} color={x.status === "failed" ? c.brick : c.graphite} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Body style={{ fontSize: 14 }} numberOfLines={1}>
+                  {x.roomName}
+                </Body>
+                <Small tone={x.status === "failed" ? "brick" : "muted"}>
+                  {x.status === "failed" ? "Couldn't be made. Take it again: stay on one spot and turn slowly." : "Making the 360° photo… usually a minute or two"}
+                </Small>
+              </View>
+              {x.status === "failed" && <Button label="Dismiss" compact variant="ghost" loading={dismissCapture.isPending} onPress={() => dismissCapture.mutate(x.id)} />}
+            </View>
+          ))}
 
         {uploads.map((u) => (
           <View key={u.id} style={{ gap: 4, paddingVertical: 6 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
               <Body style={{ flex: 1, fontSize: 14 }} numberOfLines={1}>
-                {u.kind === "model_3d" ? "3D model: " : ""}
+                {u.kind === "model_3d" ? "3D model: " : u.kind === "capture" ? "360° photo: " : ""}
                 {u.name}
               </Body>
-              <Small tone={u.status === "failed" ? "brick" : "muted"}>{u.status === "uploading" ? `${Math.round(u.progress * 100)}%` : u.status === "waiting" ? "Waiting" : "Not uploaded"}</Small>
+              <Small tone={u.status === "failed" ? "brick" : "muted"}>
+                {u.kind === "capture" && u.status !== "failed"
+                  ? `Sending ${u.sent ?? 0} of ${u.shots?.length ?? 0} photos`
+                  : u.status === "uploading"
+                    ? `${Math.round(u.progress * 100)}%`
+                    : u.status === "waiting"
+                      ? "Waiting"
+                      : "Not uploaded"}
+              </Small>
             </View>
             {u.status === "uploading" && (
               <View style={{ height: 4, borderRadius: 2, backgroundColor: c.sand, overflow: "hidden" }}>
@@ -201,16 +235,31 @@ export default function PartnerListingScreen() {
         {notice && <Notice tone="warning">{notice}</Notice>}
         {editable && (
           <>
-            <Button label="Add 360° photos" icon="images-outline" variant="accent" onPress={addPanoramas} />
+            <Button label="Take a 360° photo of a room" icon="camera-outline" variant="accent" onPress={() => router.push(`/partner/capture/${ref}`)} />
+            <Button label="Add from a 360° camera" icon="images-outline" variant="secondary" onPress={addPanoramas} />
             <Card style={{ backgroundColor: c.paper, padding: 12, gap: 6 }}>
               <Small tone="graphite">
-                On site: stand in the middle of each room and take the photo with your 360° camera (Insta360, RICOH THETA…) or a 360° photo app. It saves to your gallery; add the rooms here.
-                No signal? They upload when you&apos;re back online.
+                On site, stand in the middle of each room. Take the photo with this phone (follow the dot, about 30 photos), or with a 360° camera (Insta360, RICOH THETA…) and add it
+                from your gallery. No signal? Everything uploads when you&apos;re back online.
               </Small>
             </Card>
           </>
         )}
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: more }}
+          onPress={() => setMore((m) => !m)}
+          style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, marginTop: 6, borderTopWidth: 1, borderTopColor: c.line }}
+        >
+          <View style={{ flex: 1 }}>
+            <Title>More ways to show the home</Title>
+            <Small>A 3D model, or a tour hosted on Matterport, Kuula or CloudPano</Small>
+          </View>
+          <Ionicons name={more || l.tour.model || l.tour.link ? "chevron-up" : "chevron-down"} size={20} color={c.text} />
+        </Pressable>
+        {(more || l.tour.model || l.tour.link) && (
+          <>
         <Title style={{ marginTop: 6 }}>3D model</Title>
         {l.tour.model ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -229,7 +278,13 @@ export default function PartnerListingScreen() {
             )}
           </View>
         ) : editable ? (
-          <Button label="Add a 3D model (.glb)" icon="cube-outline" variant="secondary" compact onPress={addModel} />
+          <View style={{ gap: 8 }}>
+            <Small>A model customers can turn around in 3D, made with a scanning app or by your architect.</Small>
+            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+              <Button label="Add a 3D model (.glb)" icon="cube-outline" variant="secondary" compact onPress={addModel} />
+              <Button label="How to make one" icon="help-circle-outline" variant="ghost" compact onPress={() => router.push("/partner/model-guide")} />
+            </View>
+          </View>
         ) : (
           <Small>None.</Small>
         )}
@@ -244,6 +299,8 @@ export default function PartnerListingScreen() {
           <Button label={`Open on ${l.tour.link.provider}`} compact variant="ghost" onPress={() => Linking.openURL(l.tour.link!.url)} />
         ) : (
           <Small>None.</Small>
+        )}
+          </>
         )}
       </Card>
 

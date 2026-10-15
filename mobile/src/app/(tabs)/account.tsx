@@ -3,6 +3,7 @@ import { type Href, router } from "expo-router";
 import { Linking, Pressable, View } from "react-native";
 import { useSession } from "@/auth/session";
 import { SignedOut } from "@/components/signed-out";
+import { useTabBarSpace } from "@/components/tab-bar";
 import { Badge, Body, Button, Card, Display, Divider, Eyebrow, Loading, Screen, Scroll, Small, Title } from "@/components/ui";
 import { API_ORIGIN } from "@/config";
 import { confirm } from "@/confirm";
@@ -26,6 +27,7 @@ function Row({ icon, label, onPress, detail }: { icon: React.ComponentProps<type
 export default function Account() {
   const { status, me, signOut, switchMode } = useSession();
   const go = (href: Href) => () => router.push(href);
+  const space = useTabBarSpace();
 
   if (status === "loading") return <Loading />;
   if (status !== "signedIn") {
@@ -47,7 +49,7 @@ export default function Account() {
 
   return (
     <Screen>
-      <Scroll>
+      <Scroll contentContainerStyle={{ paddingBottom: space }}>
         <View style={{ gap: 4 }}>
           <Eyebrow>{me.user.referenceId}</Eyebrow>
           <Display size={32}>{me.user.name}</Display>

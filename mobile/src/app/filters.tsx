@@ -5,7 +5,7 @@ import { Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, query } from "@/api/client";
 import type { BrowseOptions } from "@/api/types";
-import { Body, Button, Chip, Divider, Scroll, Small, Title } from "@/components/ui";
+import { Body, Button, Chip, Display, Divider, Scroll, Small, Title } from "@/components/ui";
 import { EMPTY_FILTERS, type SearchState, setSearch, useSearch } from "@/hooks/use-search";
 import { formatPrice } from "@/lib/format";
 import { BHK_OPTIONS, FURNISHING_OPTIONS, KIND_META, SORTS, SORT_LABELS } from "@/lib/listings/filters";
@@ -22,7 +22,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const toggle = (list: string[], value: string) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
-/** The website's filters, as a sheet. Changes apply when the person taps "Show places". */
+/** The website's filters, as a bottom sheet. Changes apply when the person taps "Show places". */
 export default function Filters() {
   const c = useColors();
   const current = useSearch();
@@ -35,6 +35,13 @@ export default function Filters() {
 
   return (
     <SafeAreaView edges={["bottom"]} style={{ flex: 1, backgroundColor: c.background }}>
+      <View style={{ paddingTop: 12, paddingHorizontal: 16, paddingBottom: 6, gap: 14, borderBottomWidth: 1, borderBottomColor: c.line }}>
+        <View style={{ alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: c.sand }} />
+        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingBottom: 6 }}>
+          <Display size={28}>Filters</Display>
+          <Small>{meta.title}</Small>
+        </View>
+      </View>
       <Scroll contentContainerStyle={{ padding: 16, gap: 22, paddingBottom: 24 }}>
         <Section title="City">
           {options.isPending && <Small>Loading cities…</Small>}

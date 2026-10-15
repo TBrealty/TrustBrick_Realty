@@ -65,4 +65,10 @@ export const fonts = {
   semibold: "Geist_600SemiBold",
 } as const;
 
-export const radius = { sm: 4, md: 8, lg: 14, pill: 999 } as const;
+export const radius = { sm: 4, md: 8, lg: 14, xl: 20, xxl: 28, pill: 999 } as const;
+
+/** Soft, low shadows for floating surfaces (the tab bar, the search bar, sheets). */
+export const shadow = {
+  soft: { shadowColor: "#0d1119", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  float: { shadowColor: "#0d1119", shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+} as const;

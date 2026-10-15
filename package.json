@@ -12,6 +12,8 @@
     "images:optimize": "node scripts/optimize-images.mjs",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
+    "stitcher:up": "docker compose --profile stitcher up -d --build stitcher",
+    "stitcher:test": "docker compose --profile stitcher run --rm stitcher python3 selftest.py",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

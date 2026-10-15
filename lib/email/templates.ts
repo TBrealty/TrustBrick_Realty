@@ -117,3 +117,41 @@ export function bookingMessage(to: string, input: { subject: string; heading: st
     html: layout(escape(input.heading), input.lines.map(escape), input.action),
   };
 }
+
+/** An agent application approved: the workspace is ready (and, for a new organization, it's live). */
+export function agentApprovedMessage(to: string, input: { name: string; organization: { name: string; referenceId: string; isNew: boolean } | null; url: string }): EmailMessage {
+  const first = input.name.split(" ")[0] || "there";
+  const org = input.organization;
+  const lines = org?.isNew
+    ? [
+        `${org.name} is now live on ${brand}, and you're its admin. Your workspace is ready: onboard properties, and handle your leads and visits.`,
+        `Agents who work with you can join by applying as an agent and choosing "Join an organization" with your reference, ${org.referenceId}.`,
+      ]
+    : [
+        `Your agent workspace is ready${org ? ` with ${org.name}` : ""}. Onboard properties, and handle your leads and visits from one place.`,
+        "Every listing is reviewed before it goes live.",
+      ];
+  return {
+    to,
+    subject: `You're approved as an agent on ${brand}`,
+    text: `Hi ${first},\n\n${lines.join("\n\n")}\n\nOpen your workspace: ${input.url}`,
+    html: layout(`You're approved, ${escape(first)}`, lines.map(escape), { label: "Open your workspace", url: input.url }),
+  };
+}
+
+/** An agent application not approved, with the reviewer's reason. */
+export function agentRejectedMessage(to: string, input: { name: string; reason: string | null; organizationName: string | null; url: string }): EmailMessage {
+  const first = input.name.split(" ")[0] || "there";
+  const what = input.organizationName ? `your agent application for ${input.organizationName}` : "your agent application";
+  const lines = [
+    `We've reviewed ${what} and couldn't approve it this time.`,
+    input.reason ? `The reviewer's reason: "${input.reason}"` : "",
+    "You can correct the details and apply again from the same page.",
+  ].filter(Boolean);
+  return {
+    to,
+    subject: `Your ${brand} agent application`,
+    text: `Hi ${first},\n\n${lines.join("\n\n")}\n\n${input.url}`,
+    html: layout(`About your application, ${escape(first)}`, lines.map(escape), { label: "Review and apply again", url: input.url }),
+  };
+}

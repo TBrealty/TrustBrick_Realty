@@ -11,6 +11,17 @@ export type FormState = {
 
 export const initialFormState: FormState = { status: "idle" };
 
+/** The agent application forms (signing up as an agent, or applying while signed in): many fields, keyed by name. */
+export type AgentFormState = {
+  status: "idle" | "error";
+  message?: string;
+  fieldErrors?: Record<string, string>;
+  /** What was typed, so a failed submit keeps it. Never includes the password. */
+  values?: Record<string, string>;
+};
+
+export const initialAgentFormState: AgentFormState = { status: "idle" };
+
 /** Where the signup flow remembers the address shown on the "check your email" page. */
 export const PENDING_EMAIL_COOKIE = "tb_pending_email";
 

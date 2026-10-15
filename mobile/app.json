@@ -8,7 +8,11 @@
     "scheme": "trustbrick",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": {
+        "light": "./assets/images/icon.png",
+        "dark": "./assets/images/icon-dark.png",
+        "tinted": "./assets/images/icon-tinted.png"
+      },
       "bundleIdentifier": "in.trustbrick.app"
     },
     "android": {
@@ -31,10 +35,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F2EEE6",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
+          "imageWidth": 120,
+          "backgroundColor": "#F2EEE6",
           "dark": {
+            "image": "./assets/images/splash-icon-dark.png",
             "backgroundColor": "#12151B"
           }
         }
@@ -46,7 +51,21 @@
           "color": "#B0502C"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Trustbrick uses the camera to take 360° photos of rooms for virtual tours.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Trustbrick uses motion to guide you while taking a 360° photo of a room."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

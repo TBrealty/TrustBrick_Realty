@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
+import { FlatList, RefreshControl, View } from "react-native";
 import { api } from "@/api/client";
 import type { Notification } from "@/api/types";
 import { useSession } from "@/auth/session";
 import { SignedOut } from "@/components/signed-out";
+import Animated from "react-native-reanimated";
+import { PressableScale, enter } from "@/components/motion";
+import { useTabBarSpace } from "@/components/tab-bar";
 import { Body, Button, Display, EmptyState, ErrorState, Loading, Screen, Small } from "@/components/ui";
 import { relativeTime } from "@/lib/format";
 import { routeFor } from "@/links";
@@ -13,6 +16,7 @@ import { fonts, useColors } from "@/theme";
 /** Notifications: the same ones the website shows, and the ones pushed to the phone. */
 export default function Alerts() {
   const c = useColors();
+  const space = useTabBarSpace();
   const queryClient = useQueryClient();
   const { status, refreshMe } = useSession();
   const list = useQuery({ queryKey: ["notifications"], queryFn: () => api<{ unread: number; items: Notification[] }>("/notifications"), enabled: status === "signedIn" });
@@ -42,18 +46,20 @@ export default function Alerts() {
         <FlatList
           data={list.data.items}
           keyExtractor={(n) => n.id}
-          contentContainerStyle={{ padding: 16, gap: 2, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 2, flexGrow: 1, paddingBottom: space }}
           refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => list.refetch()} tintColor={c.brick} />}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const route = routeFor(item.link);
             return (
-              <Pressable
+              <Animated.View entering={enter(index, 40)}>
+              <PressableScale
+                scaleTo={0.98}
                 accessibilityRole={route ? "link" : "text"}
                 onPress={() => {
                   if (!item.read) read.mutate(item.id);
                   if (route) router.push(route);
                 }}
-                style={({ pressed }) => ({ flexDirection: "row", gap: 12, paddingVertical: 12, opacity: pressed ? 0.7 : 1 })}
+                style={{ flexDirection: "row", gap: 12, paddingVertical: 12 }}
               >
                 <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: item.read ? "transparent" : c.brick }} />
                 <View style={{ flex: 1, gap: 2 }}>
@@ -61,7 +67,8 @@ export default function Alerts() {
                   {item.body ? <Small numberOfLines={2}>{item.body}</Small> : null}
                   <Small style={{ fontSize: 12 }}>{relativeTime(item.createdAt)}</Small>
                 </View>
-              </Pressable>
+              </PressableScale>
+              </Animated.View>
             );
           }}
           ListEmptyComponent={

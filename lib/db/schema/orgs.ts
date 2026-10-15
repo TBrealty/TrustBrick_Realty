@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   index,
+  jsonb,
   pgSchema,
   primaryKey,
   smallint,
@@ -49,6 +50,11 @@ export const organizations = orgs.table(
     contactPhone: text("contact_phone"),
     /** RERA registration for brokerages and developers, where the state requires one. */
     reraRegistration: text("rera_registration"),
+    /** GSTIN, upper case (15 characters; its characters 3 to 12 are the PAN). */
+    gstin: text("gstin"),
+    /** The registered office address, as one block of text. */
+    address: text("address"),
+    website: text("website"),
     cityPlaceId: uuid("city_place_id").references(() => places.id, { onDelete: "set null" }),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     /** Development sample data. Never shown as real, never seeded in production. */
@@ -62,6 +68,9 @@ export const organizations = orgs.table(
     index("organizations_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
     // Exactly one platform organization.
     uniqueIndex("organizations_single_internal_idx").on(t.orgType).where(sql`"org_type" = 'internal'`),
+    // One live organization per GSTIN (a rejected or deleted one doesn't block a new application).
+    uniqueIndex("organizations_gstin_idx").on(t.gstin).where(sql`"gstin" IS NOT NULL AND "deleted_at" IS NULL AND "status" <> 'rejected'`),
+    check("organizations_gstin_check", sql`"gstin" IS NULL OR "gstin" ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'`),
     check("organizations_org_type_check", inList("org_type", ORG_TYPES)),
     check("organizations_status_check", inList("status", ORG_STATUSES)),
     check("organizations_verification_status_check", inList("verification_status", VERIFICATION_STATUSES)),
@@ -211,6 +220,11 @@ export const teamMembers = orgs.table(
 // ── People with professional standing ──────────────────────────────────────────
 
 export const AGENT_STATUSES = ["pending", "active", "suspended", "rejected"] as const;
+/**
+ * How an agent applied: on their own, to join an organization already on Trustbrick, or
+ * registering a new organization (which is created pending, and goes live when they're approved).
+ */
+export const AGENT_APPLICATION_TYPES = ["independent", "join_organization", "new_organization"] as const;
 
 /**
  * An agent's professional profile. Where they work is their membership, not a column here,
@@ -227,6 +241,7 @@ export const agentProfiles = orgs.table(
       .references(() => users.id, { onDelete: "restrict" }),
     /** Where the agent asked to work. The membership is created there on approval. */
     requestedOrganizationId: uuid("requested_organization_id").references(() => organizations.id, { onDelete: "set null" }),
+    applicationType: text("application_type").notNull().default("independent"),
     phone: text("phone").notNull(),
     reraAgentNumber: text("rera_agent_number"),
     cityPlaceId: uuid("city_place_id").references(() => places.id, { onDelete: "set null" }),
@@ -243,11 +258,25 @@ export const agentProfiles = orgs.table(
   (t) => [
     index("agent_profiles_status_created_idx").on(t.status, t.createdAt),
     check("agent_profiles_status_check", inList("status", AGENT_STATUSES)),
+    check("agent_profiles_application_type_check", inList("application_type", AGENT_APPLICATION_TYPES)),
     check("agent_profiles_verification_status_check", inList("verification_status", VERIFICATION_STATUSES)),
     check("agent_profiles_phone_check", sql`"phone" ~ '^[+]?[0-9]{10,15}$'`),
     check("agent_profiles_experience_check", sql`"experience_years" IS NULL OR "experience_years" BETWEEN 0 AND 70`),
   ],
 );
+
+/**
+ * An agent application made while signing up, kept until the person confirms their email:
+ * only then does it become an application (so admins never review unconfirmed addresses).
+ */
+export const agentSignups = orgs.table("agent_signups", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** The application form, as submitted (validated again when it's sent on). */
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Staff identity. Access itself is the internal-organization membership and its grants. */
 export const adminProfiles = orgs.table(

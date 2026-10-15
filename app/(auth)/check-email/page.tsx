@@ -7,7 +7,8 @@ import { PENDING_EMAIL_COOKIE } from "@/lib/auth/form";
 
 export const metadata: Metadata = { title: "Check your email — Trustbrick" };
 
-export default async function CheckEmailPage() {
+export default async function CheckEmailPage({ searchParams }: { searchParams: Promise<{ as?: string }> }) {
+  const agent = (await searchParams).as === "agent";
   // The address comes from a short-lived httpOnly cookie, never from the URL.
   const email = (await cookies()).get(PENDING_EMAIL_COOKIE)?.value;
   const isDev = process.env.NODE_ENV === "development";
@@ -32,13 +33,18 @@ export default async function CheckEmailPage() {
       </AuthHeading>
 
       <div className="space-y-6 border-t border-line-light pt-8">
+        {agent && (
+          <p className="border-l-2 border-sage bg-sage/10 px-4 py-3 text-[0.9375rem] leading-relaxed text-ink">
+            Your agent application is saved. It goes to our team as soon as you confirm your email, and we&rsquo;ll email you when it&rsquo;s decided.
+          </p>
+        )}
         <p className="text-[0.9375rem] leading-relaxed text-graphite">
           The link expires in 24 hours. Can&rsquo;t find it? Check your spam folder.
         </p>
         {email && <ResendVerificationForm />}
         <p className="text-[0.9375rem] text-graphite">
           Wrong address?{" "}
-          <Link href="/signup" className="link-rule font-medium text-ink">
+          <Link href={agent ? "/signup?as=agent" : "/signup"} className="link-rule font-medium text-ink">
             Start again
           </Link>
         </p>

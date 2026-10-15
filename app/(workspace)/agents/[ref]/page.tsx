@@ -13,6 +13,8 @@ import { requirePermission } from "@/lib/authz/session";
 import { AppError } from "@/lib/errors";
 import { formatDay } from "@/lib/format";
 import { STATUS_LABELS } from "@/lib/listings/lifecycle";
+import { panFromGstin } from "@/lib/organizations/gstin";
+import { APPLICANT_ORG_TYPE_LABELS, type ApplicantOrgType } from "@/lib/organizations/terms";
 import { getAgent } from "@/lib/services/agents";
 import { auditTrailFor } from "@/lib/services/audit-log";
 import { approveAgentAction, reinstateAgentAction, rejectAgentAction, suspendAgentAction, updateAgentAction, verifyAgentAction } from "../actions";
@@ -36,6 +38,13 @@ export default async function AgentPage({ params }: Props) {
   const canVerify = can(actor, "agents.verify", "platform");
   const canSuspend = can(actor, "agents.suspend", "platform");
   const canManage = can(actor, "agents.manage", "platform");
+  const org = agent.newOrganization;
+  const approveDescription = org
+    ? `${org.name} goes live on Trustbrick and ${agent.name} becomes its admin, with their own workspace. Check the GST number and address first.`
+    : agent.requestedOrganization
+      ? `They join ${agent.requestedOrganization.name} and get an agent workspace.`
+      : "They get an agent workspace in their own independent organization.";
+  const applyingAs = org ? "Registering a new organization" : agent.applicationType === "join_organization" ? "Joining an organization on Trustbrick" : "Individual agent";
 
   return (
     <>
@@ -58,11 +67,23 @@ export default async function AgentPage({ params }: Props) {
           <>
             {agent.status === "pending" && canVerify && (
               <>
-                <ConfirmAction label="Approve" title="Approve this agent?" variant="primary" action={approveAgentAction} hidden={{ ref }}
-                  description={agent.requestedOrganization ? `They join ${agent.requestedOrganization.name} and get an agent workspace.` : "They get an agent workspace in their own independent organization."}>
-                  <Checkbox name="verify" label="Mark as verified" hint="Only if you've checked their RERA registration and identity." defaultChecked={Boolean(agent.reraAgentNumber)} />
+                <ConfirmAction label="Approve" title={org ? `Approve ${agent.name} and ${org.name}?` : "Approve this agent?"} variant="primary" action={approveAgentAction} hidden={{ ref }} description={approveDescription}>
+                  <Checkbox
+                    name="verify"
+                    label="Mark as verified"
+                    hint={org ? "Only if you've checked the GST number, RERA registration and their identity." : "Only if you've checked their RERA registration and identity."}
+                    defaultChecked={Boolean(agent.reraAgentNumber)}
+                  />
                 </ConfirmAction>
-                <ConfirmAction label="Reject" title="Reject this application?" variant="danger" action={rejectAgentAction} hidden={{ ref }} reason={{ required: true, placeholder: "The applicant sees this." }} />
+                <ConfirmAction
+                  label="Reject"
+                  title="Reject this application?"
+                  variant="danger"
+                  action={rejectAgentAction}
+                  hidden={{ ref }}
+                  description="They get an email with your reason, and can correct their details and apply again."
+                  reason={{ required: true, placeholder: "The applicant sees this in the email." }}
+                />
               </>
             )}
             {agent.status === "active" && canVerify && (
@@ -115,7 +136,8 @@ export default async function AgentPage({ params }: Props) {
                 ["Experience", agent.experienceYears !== null ? `${agent.experienceYears} years` : null],
                 ["City", agent.city],
                 ["Organization", agent.organization ? <span key="o">{agent.organization} {agent.organizationReferenceId && <ReferenceId value={agent.organizationReferenceId} href={can(actor, "organizations.view", "platform") ? `/organizations/${agent.organizationReferenceId}` : undefined} copy={false} />}</span> : null],
-                ["Asked to join", agent.requestedOrganization ? `${agent.requestedOrganization.name} (${agent.requestedOrganization.referenceId})` : "Independent"],
+                ["Applying as", applyingAs],
+                ["Asked to join", !org && agent.requestedOrganization ? `${agent.requestedOrganization.name} (${agent.requestedOrganization.referenceId})` : null],
                 ["Applied", formatDay(agent.createdAt)],
                 ["Approved", agent.approvedAt ? formatDay(agent.approvedAt) : null],
                 ["Last active", <When key="l" at={agent.lastActiveAt} />],
@@ -123,6 +145,26 @@ export default async function AgentPage({ params }: Props) {
             />
             {agent.bio && <p className="mt-4 border-t border-line-light pt-3 text-[0.8125rem] text-graphite">{agent.bio}</p>}
           </Card>
+
+          {org && (
+            <Card title="Organization they're registering" description="Created with the application. It goes live if you approve, and is rejected with it otherwise.">
+              <DescriptionList
+                items={[
+                  ["Registered name", org.name],
+                  ["Reference", <ReferenceId key="r" value={org.referenceId} href={can(actor, "organizations.view", "platform") ? `/organizations/${org.referenceId}` : undefined} copy={false} />],
+                  ["Status", <Status key="s" value={org.status} />],
+                  ["Kind", APPLICANT_ORG_TYPE_LABELS[org.type as ApplicantOrgType] ?? org.type],
+                  ["GST number", org.gstin ? <span key="g" className="font-mono">{org.gstin}</span> : null],
+                  ["PAN (from the GSTIN)", org.gstin ? <span key="p" className="font-mono">{panFromGstin(org.gstin)}</span> : null],
+                  ["RERA registration", org.reraRegistration],
+                  ["Registered office", org.address],
+                  ["Office email", org.contactEmail],
+                  ["Office phone", org.contactPhone],
+                  ["Website", org.website ? <a key="w" href={org.website} target="_blank" rel="noreferrer noopener" className="underline">{org.website}</a> : null],
+                ]}
+              />
+            </Card>
+          )}
 
           <Card title="Recent listings" padded={false}>
             <DataTable

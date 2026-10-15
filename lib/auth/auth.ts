@@ -78,6 +78,14 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url: verifyUrl }) => {
       dispatch(verifyEmailMessage(user.email, user.name, verifyUrl));
     },
+    // Someone who signed up as an agent: their application goes to the team now, not before.
+    afterEmailVerification: async (user, request) => {
+      const { submitHeldAgentSignup } = await import("@/lib/services/agents");
+      await submitHeldAgentSignup(user.id, {
+        ipAddress: request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+        userAgent: request?.headers.get("user-agent") ?? null,
+      });
+    },
   },
 
   // Tokens are stored hashed: a leaked database row cannot be replayed as a reset link.

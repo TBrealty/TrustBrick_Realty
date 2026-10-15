@@ -65,7 +65,7 @@ export type OrganizationRow = {
   createdAt: string;
 };
 
-const slugify = (name: string) =>
+export const slugify = (name: string) =>
   name
     .toLowerCase()
     .normalize("NFKD")

@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef } from "react";
-import { useColorScheme } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, useColorScheme } from "react-native";
 import { ApiError } from "@/api/client";
 import { SessionProvider } from "@/auth/session";
+import { Intro } from "@/components/intro";
 import { routeFor } from "@/links";
 import { useTappedNotification } from "@/push";
 import { fonts, palette } from "@/theme";
@@ -43,16 +44,15 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const c = scheme === "dark" ? palette.dark : palette.light;
   const [loaded] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, InstrumentSerif_400Regular });
-
-  useEffect(() => {
-    if (loaded) void SplashScreen.hideAsync();
-  }, [loaded]);
+  // The opening animation plays once per launch; it hides the system launch screen itself.
+  const [intro, setIntro] = useState(true);
   if (!loaded) return null;
 
   const base = scheme === "dark" ? DarkTheme : DefaultTheme;
   const theme = { ...base, colors: { ...base.colors, primary: c.brick, background: c.background, card: c.background, text: c.text, border: c.line } };
 
   return (
+    <View style={{ flex: 1, backgroundColor: c.background }}>
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
         <ThemeProvider value={theme}>
@@ -64,14 +64,17 @@ export default function RootLayout() {
               headerBackButtonDisplayMode: "minimal",
               headerShadowVisible: false,
               contentStyle: { backgroundColor: c.background },
+              animation: "ios_from_right",
             }}
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="listing/[ref]/index" options={{ title: "", headerTransparent: true }} />
+            <Stack.Screen name="search" options={{ headerShown: false, animation: "fade_from_bottom" }} />
+            <Stack.Screen name="city" options={{ presentation: "formSheet", sheetAllowedDetents: [0.55, 0.9], sheetCornerRadius: 28 }} />
+            <Stack.Screen name="listing/[ref]/index" options={{ headerShown: false }} />
             <Stack.Screen name="listing/[ref]/tour" options={{ title: "Virtual tour" }} />
             <Stack.Screen name="listing/[ref]/enquire" options={{ title: "Contact the agent", presentation: "modal" }} />
             <Stack.Screen name="listing/[ref]/book" options={{ title: "Book this stay", presentation: "modal" }} />
-            <Stack.Screen name="filters" options={{ title: "Filters", presentation: "modal" }} />
+            <Stack.Screen name="filters" options={{ presentation: "formSheet", sheetAllowedDetents: [0.85, 1], sheetCornerRadius: 28 }} />
             <Stack.Screen name="sign-in" options={{ title: "Sign in", presentation: "modal" }} />
             <Stack.Screen name="sign-up" options={{ title: "Create an account", presentation: "modal" }} />
             <Stack.Screen name="forgot-password" options={{ title: "Reset your password", presentation: "modal" }} />
@@ -86,9 +89,13 @@ export default function RootLayout() {
             <Stack.Screen name="partner/conversation/[ref]" options={{ title: "Messages" }} />
             <Stack.Screen name="partner/listing/[ref]" options={{ title: "Listing" }} />
             <Stack.Screen name="partner/tour/[ref]" options={{ title: "Tour preview" }} />
+            <Stack.Screen name="partner/capture/[ref]" options={{ headerShown: false, animation: "fade", orientation: "portrait", gestureEnabled: false }} />
+            <Stack.Screen name="partner/model-guide" options={{ title: "3D models" }} />
           </Stack>
         </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>
+    {intro && <Intro onDone={() => setIntro(false)} />}
+    </View>
   );
 }

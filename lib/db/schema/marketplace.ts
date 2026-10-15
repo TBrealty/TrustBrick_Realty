@@ -6,7 +6,9 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgSchema,
+  real,
   primaryKey,
   smallint,
   text,
@@ -20,7 +22,7 @@ import { deletedAt, id, money, referenceId, timestamps, tsvector, tstzrange } fr
 import { users } from "./identity";
 import { BROKERAGE_TYPES, LISTING_STATUSES } from "../../vocab";
 import { memberships, organizations } from "./orgs";
-import { properties } from "./real-estate";
+import { media, properties } from "./real-estate";
 
 /**
  * Market offers. A listing is one offer to sell, rent or let a property as a PG,
@@ -270,5 +272,51 @@ export const listingViews = marketplace.table(
   (t) => [
     primaryKey({ columns: [t.listingId, t.viewedOn, t.viewerKey] }),
     index("listing_views_viewed_on_idx").on(t.viewedOn),
+  ],
+);
+
+// ── 360° photos taken with the app's guided camera ─────────────────────────────
+
+export const CAPTURE_STATUSES = ["uploading", "queued", "stitching", "done", "failed"] as const;
+
+/** One photo of a guided capture: where the phone pointed (degrees; yaw relative to the first photo). */
+export type CaptureShot = { index: number; yaw: number; pitch: number; roll: number; key: string };
+
+/**
+ * A room photographed with the app's guided camera: about 30 photos, each with the direction the
+ * phone pointed. Once all are uploaded, the stitching service joins them into one 360° photo,
+ * which is added to the listing's tour like an uploaded one (and the photos are deleted).
+ */
+export const tourCaptures = marketplace.table(
+  "tour_captures",
+  {
+    id: id(),
+    listingId: uuid("listing_id")
+      .notNull()
+      .references(() => listings.id, { onDelete: "cascade" }),
+    /** Who took it, and in which workspace: the 360° photo is added as them. */
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    roomName: text("room_name").notNull(),
+    /** The camera's horizontal field of view, in degrees: the stitcher's starting guess. */
+    hfov: real("hfov").notNull(),
+    shotCount: smallint("shot_count").notNull(),
+    shots: jsonb("shots").$type<CaptureShot[]>().notNull().default([]),
+    status: text("status").notNull().default("uploading"),
+    attempts: smallint("attempts").notNull().default(0),
+    error: text("error"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    mediaId: uuid("media_id").references(() => media.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    index("tour_captures_listing_idx").on(t.listingId, t.createdAt),
+    index("tour_captures_pending_idx").on(t.createdAt).where(sql`"status" IN ('queued', 'stitching')`),
+    check("tour_captures_status_check", sql.raw(`"status" IN (${CAPTURE_STATUSES.map((v) => `'${v}'`).join(", ")})`)),
+    check("tour_captures_shot_count_check", sql`"shot_count" BETWEEN 6 AND 60`),
   ],
 );
