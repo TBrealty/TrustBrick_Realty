@@ -18,6 +18,8 @@ const corsHeaders = apiCorsOrigin
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // A self-contained server for the Docker image (Dockerfile); `next dev` and `next start` are unaffected.
+  output: "standalone",
   poweredByHeader: false,
   async headers() {
     return corsHeaders.length

@@ -1,0 +1,15 @@
+# Kept out of the website's Docker image (Dockerfile).
+.git
+node_modules
+.next
+.data
+.env*
+!.env.example
+mobile
+stitcher
+tests
+coverage
+deploy/.env
+deploy/backups
+*.log
+tsconfig.tsbuildinfo

@@ -6,6 +6,7 @@ import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { api, assetUrl, query } from "@/api/client";
 import type { ConversationSummary, Page } from "@/api/types";
 import { useSession } from "@/auth/session";
+import { useTabBarSpace } from "@/components/tab-bar";
 import { Badge, Body, Chip, Display, EmptyState, ErrorState, Loading, Screen, Small } from "@/components/ui";
 import { relativeTime } from "@/lib/format";
 import { fonts, radius, useColors } from "@/theme";
@@ -13,6 +14,7 @@ import { fonts, radius, useColors } from "@/theme";
 /** Guests' messages about the host's stays. */
 export default function Inbox() {
   const c = useColors();
+  const space = useTabBarSpace();
   const { workspace } = useSession();
   const [show, setShow] = useState<"all" | "unread">("all");
   const list = useQuery({
@@ -24,7 +26,7 @@ export default function Inbox() {
   return (
     <Screen>
       <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 12 }}>
-        <Display size={32}>Inbox</Display>
+        <Display size={34}>Messages</Display>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Chip label="All" selected={show === "all"} onPress={() => setShow("all")} />
           <Chip label={list.data?.unread ? `Unread ${list.data.unread}` : "Unread"} selected={show === "unread"} onPress={() => setShow("unread")} />
@@ -38,7 +40,7 @@ export default function Inbox() {
         <FlatList
           data={list.data.rows}
           keyExtractor={(i) => i.referenceId}
-          contentContainerStyle={{ padding: 16, gap: 4, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 4, flexGrow: 1, paddingBottom: space }}
           refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => list.refetch()} tintColor={c.brick} />}
           renderItem={({ item }) => (
             <Link href={`/partner/conversation/${item.referenceId}`} asChild>

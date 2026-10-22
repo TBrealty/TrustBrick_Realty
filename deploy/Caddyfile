@@ -1,0 +1,28 @@
+# HTTPS for Trustbrick. Caddy gets and renews the Let's Encrypt certificates by itself once the
+# domain's DNS points at this server. DOMAIN comes from deploy/.env.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	# Videos go up to 100 MB; a little room for the request around them.
+	request_body {
+		max_size 110MB
+	}
+	# Caddy ignores X-Forwarded-For sent by clients and sets its own, so the app's per-address
+	# rate limits can't be fooled.
+	reverse_proxy app:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

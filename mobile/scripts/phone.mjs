@@ -30,7 +30,11 @@ function run(command, args, { cwd = root, env = {}, quiet = false } = {}) {
   return String(result.stdout ?? "").trim();
 }
 
-const adb = (...args) => run(`"${adbPath}"`, args, { quiet: true });
+const command = process.argv[2];
+// The phone on the cable (-d), not an emulator or a phone over Wi-Fi.
+const target = "-d";
+const where = "the phone";
+const adb = (...args) => run(`"${adbPath}"`, [target, ...args], { quiet: true });
 const step = (text) => console.log(`\n▸ ${text}`);
 
 function requirePhone() {
@@ -38,7 +42,7 @@ function requirePhone() {
     console.error(`✗ adb not found at ${adbPath}. Set ANDROID_HOME to the Android SDK.`);
     process.exit(1);
   }
-  const state = spawnSync(`"${adbPath}"`, ["get-state"], { shell: process.platform === "win32", encoding: "utf8" });
+  const state = spawnSync(`"${adbPath}"`, [target, "get-state"], { shell: process.platform === "win32", encoding: "utf8" });
   if (state.stdout.trim() !== "device") {
     console.error("✗ No phone found. Plug it in, unlock it and allow USB debugging (\"Always allow from this computer\").");
     process.exit(1);
@@ -48,11 +52,11 @@ function requirePhone() {
 function connect() {
   adb("reverse", "tcp:3000", "tcp:3000");
   adb("reverse", "tcp:8081", "tcp:8081");
-  console.log("✓ The phone reaches this computer's website (port 3000) and dev server (port 8081) over the cable.");
+  console.log(`✓ ${where.charAt(0).toUpperCase() + where.slice(1)} reaches this computer's website (port 3000) and dev server (port 8081).`);
 }
 
 function install(file) {
-  step("Installing on the phone");
+  step(`Installing on ${where}`);
   adb("install", "-r", `"${file}"`);
   connect();
   adb("shell", "am", "start", "-n", `${PACKAGE}/.MainActivity`);
@@ -64,7 +68,6 @@ function gradle(task, env = {}) {
   run(gradlew, ["--stop"], { cwd: androidDir, quiet: true });
 }
 
-const command = process.argv[2];
 requirePhone();
 
 if (command === "connect") {
@@ -76,7 +79,7 @@ if (command === "connect") {
   step("Building the app (the first time takes a while; updates after that are quicker)");
   gradle("app:assembleRelease", env);
   install(apk("release"));
-  console.log("\n✓ Updated. The app opens on the phone; its code is inside it now.");
+  console.log(`\n✓ Updated. The app opens on ${where}; its code is inside it now.`);
 } else if (command === "dev") {
   if (!existsSync(apk("debug"))) {
     step("Building the development app");

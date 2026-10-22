@@ -82,6 +82,8 @@ export default function Account() {
           <Divider />
           <Row icon="heart-outline" label="Saved homes" onPress={() => router.navigate("/saved")} />
           <Divider />
+          <Row icon="shield-checkmark-outline" label="Password, devices and notifications" onPress={go("/security")} />
+          <Divider />
           <Row icon="globe-outline" label="Profile and settings on the website" onPress={() => Linking.openURL(`${API_ORIGIN}/account/profile`)} />
         </Card>
 

@@ -52,6 +52,10 @@ Tests: `tests/api-v1.test.ts`.
 | `POST /auth/sign-out` | user | Ends this session; its push registration goes with it |
 | `POST /auth/forgot-password` | — | `{ email }` → `{ message }` (same either way) |
 | `GET /me` | user | `{ user, workspaces[], activeWorkspace, plan: { code, name, features[], subscription, trialAvailable }, unreadNotifications }` |
+| `GET /me/security` | user | Profile & security: where the person is signed in (`current` marks this device) and each notification type with `enabled` and `locked` (security notices can't be turned off) |
+| `POST /me/password` | user | `{ currentPassword, newPassword, confirmPassword }` → `{ token }`. Every session ends, as on the website; the app carries on with the returned token |
+| `DELETE /me/sessions` | user | Signs out everywhere else → `{ signedOut }` |
+| `PUT /me/notification-preferences` | user | `{ enabled: [types] }`; the rest are muted |
 
 ### Push notifications
 
@@ -115,7 +119,10 @@ and return `{ rows, total, page, pageSize }` (25 a page).
 
 | Method and path | Auth | Body → result |
 | --- | --- | --- |
-| `GET /partner/summary` | user | The home screen: `{ workspace, leads, visits, bookings, inbox, listings }`. A part is `null` when the role doesn't cover it, which is also how the app decides which tabs to show |
+| `GET /partner/summary` | user | The home screen: `{ workspace, leads, visits, bookings, inbox, listings, can }`. A part is `null` when the role doesn't cover it, which is also how the app decides which tabs to show. `can` says which other screens the role has, as the website's sidebar: `onboard`, `performance`, `clients`, `team`, `commission`, `subscription`, `calendar` (agents get the calendar once they have a homestay) |
+| `GET /partner/dashboard?range=7d\|30d\|90d\|year\|12m` | user | The website's dashboard: listings by status, leads and views against the previous period, visits, a views and leads series, listings needing attention, top listings |
+| `GET /partner/performance?range=` | user | Views, viewers, leads, visits and saves per listing |
+| `GET /partner/contacts?q=` | user | Clients: everyone who has enquired, with their lead count |
 | `GET /partner/leads?open=1&status=&q=` | user | Leads |
 | `GET /partner/leads/{ref}` | user | One lead: contact, listing, visits, notes, history and the statuses it can move to |
 | `POST /partner/leads/{ref}/status` | user | `{ status, note?, lostReason? }` → the updated lead. The customer is notified when it matters |
@@ -128,8 +135,37 @@ and return `{ rows, total, page, pageSize }` (25 a page).
 | `POST /partner/bookings/{ref}/conversation` | user | Opens (or finds) the conversation with the guest → `{ referenceId }` |
 | `GET /partner/conversations?show=unread&q=` · `GET /partner/conversations/{ref}` | user | The host's inbox; one conversation (marks it read) |
 | `GET` / `POST /partner/conversations/{ref}/messages` | user | As for customers. A reply notifies and pushes to the guest |
-| `GET /partner/listings?group=&q=&sort=` | user | The workspace's listings, each with `statusLabel` and the tour status |
+| `GET /partner/listings?group=&q=&sort=` | user | The workspace's listings, each with `statusLabel` and the tour status, and `counts` per status group (`all`, `active`, `drafts`, `pending`, `rejected`, `archived`) |
 | `GET /partner/listings/{ref}` | user | One listing with its tour: rooms (`id`, `name`, thumbnails), the 3D model, the hosted link, `tourMode` and `tourReviewWaiting` |
+
+**Properties, as on the website.** Onboarding and editing follow the website's steps and checks
+(lib/listings/onboarding-schema); a field the server rejects comes back in `fieldErrors` under the
+field's name (`rooms.0.rentPerBed` for a PG room).
+
+| Method and path | Auth | Body → result |
+| --- | --- | --- |
+| `GET /partner/onboarding/options` | user | Property types (with the purposes each takes), cities and localities, amenities, and the `purposes` this person may list (hosts: homestays) |
+| `POST /partner/listings` | user | `{ purpose, propertyType, localityId, line1, line2?, landmark?, postalCode?, mapLink? }` creates the draft → `201 { referenceId }` |
+| `POST /partner/map-link` | user | `{ link }` → `{ ok, pin? , reason? }`, following short links. The app builds `https://maps.google.com/?q=lat,lng` from the phone's location |
+| `GET /partner/listings/{ref}/workspace` | user | Everything to manage it: the full listing (for the steps), the card (facts, terms, offer, price and status history), `gaps` before it can be submitted, the `actions` open now (with `label`, `confirm`, `reasonRequired`), `deal` for closing a live sale or rental, `editable` and `quickEdit` |
+| `PUT /partner/listings/{ref}/location` · `details` · `pricing` · `amenities` | user | One step, while the listing can be edited (a draft, or sent back). Pricing for a PG sends `rooms[]`; amenities send `{ amenities[], custom[] }` |
+| `PUT /partner/listings/{ref}/terms` | user | Quick edit of a live listing: price, deposit, maintenance, availability, an offer; a PG's room rents and free beds; a homestay's nightly prices and stay lengths. No new review |
+| `POST /partner/listings/{ref}/transition` | user | `{ action, reason?, close? }`: submit, withdraw, archive, mark closed (`close: { outcome, dealValue?, brokerage? }` for a sale or rental; a closed deal adds the commission charge), reopen |
+| `POST /partner/listings/{ref}/media?kind=photo\|floor_plan\|video\|document` | user | As for tour files below. Documents are private. Only while the listing can be edited |
+
+**Hosting, commission, plan and team.**
+
+| Method and path | Auth | Body → result |
+| --- | --- | --- |
+| `GET /partner/stays` | user | The homestays whose calendars this person manages |
+| `GET /partner/stays/{ref}/calendar?month=YYYY-MM` | user | Each night's price, bookings, blocks and waiting requests, the month's blocks and special prices, and `canEdit` |
+| `POST /partner/stays/{ref}/blocks` · `DELETE …/blocks/{id}` | user | `{ from, to, reason? }` (both nights included) closes nights; delete opens them again |
+| `POST /partner/stays/{ref}/rates` · `DELETE …/rates/{id}` | user | `{ from, to, price, note? }`: a special nightly price |
+| `GET /partner/commission?status=due\|paid\|waived\|all&month=` | user | Rates, GST, whether the terms are accepted (listings can't be submitted until they are), and the ledger with totals |
+| `POST /partner/commission/accept` | user | Accepts the rates (the organization's admin, or an independent agent) |
+| `GET /partner/subscription` | user | The organization's plan, the plans on offer, its history and `canManage` |
+| `POST /partner/subscription/trial` · `choose` · `cancel` · `resume` | user | `{ plan, cycle }` for a trial or a paid plan (the team arranges payment); cancel stops renewal |
+| `GET /partner/agents?q=&status=` · `GET /partner/agents/{ref}` | user | Broker admins: the organization's agents, and one agent's profile, numbers and recent listings |
 
 **The tour, from the phone.** `tourMode` says what can be changed: `draft` (anything; reviewed
 with the listing), `live` (changes show straight away and each one goes to Approvals → Virtual
@@ -138,7 +174,7 @@ tours), `locked` (the tour was hidden; it stays hidden until an admin approves a
 
 | Method and path | Auth | Body → result |
 | --- | --- | --- |
-| `POST /partner/listings/{ref}/media?kind=panorama\|model_3d` | user | The file itself as the body (not a form), with `Content-Type` and `X-File-Name` (URL-encoded) → `201` with the new room or model. A 360° photo must be a 2:1 panorama; a model is a `.glb` up to 100 MB. Photos for the listing itself aren't taken here (`409`) |
+| `POST /partner/listings/{ref}/media?kind=panorama\|model_3d` | user | The file itself as the body (not a form), with `Content-Type` and `X-File-Name` (URL-encoded) → `201` with the new room or model. A 360° photo must be a 2:1 panorama; a model is a `.glb` up to 100 MB. On a live listing only tour files can be added; anything else is `409` until it's withdrawn |
 | `PUT /partner/listings/{ref}/media/{id}` | user | `{ name }` renames a room |
 | `DELETE /partner/listings/{ref}/media/{id}` | user | Removes a room or the model |
 | `PUT /partner/listings/{ref}/media-order` | user | `{ ids[] }`: the room order (the first opens the tour) |
@@ -163,7 +199,7 @@ Uploads are rate-limited per person. The app sends the raw file so a phone can u
 background and resume after losing signal.
 
 The app itself is in [`mobile/`](../mobile/README.md). Tests for this section:
-`tests/api-partner.test.ts`.
+`tests/api-partner.test.ts` and `tests/api-partner-workspace.test.ts`.
 
 ## Server settings
 

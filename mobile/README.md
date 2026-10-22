@@ -22,15 +22,42 @@ every rule, permission and notification is shared with the website.
 ## Partner mode (agents and hosts)
 
 Account → **Switch to partner mode** (and pick the workspace if there are several). The app
-remembers the choice; the tabs follow the person's role, as the website's workspace does.
+remembers the choice. Everything an agent, broker or host does in the website's workspace can be
+done here; the tabs and the More menu follow the person's role, as the website's sidebar does
+(`can` in `/partner/summary`).
 
 | Tab or screen | What it does |
 | --- | --- |
-| **Today** | New and open leads, upcoming visits, booking requests, unread guest messages and listings by status |
-| **Leads** (agents) | Leads and site visits; a lead's contact (call, WhatsApp, email), status, notes and history; schedule a visit (the customer is notified), mark it done or missed |
-| **Bookings** (hosts) | Requests, upcoming, past, cancelled; accept or decline, check the guest in, complete or cancel, and message the guest |
-| **Inbox** (hosts) | Guest conversations |
-| **Listings** | The workspace's listings with their status and tour; each opens to its virtual tour editor |
+| **Today** | What needs doing (booking requests, visits to confirm, new leads, listings sent back), shortcuts, the dashboard's numbers for 7, 30 or 90 days with a views chart, and the most viewed listings |
+| **Properties** | Search, status groups with counts, and **Onboard** |
+| **Leads** (agents) | Search and stages, a call a tap away; a lead's contact, status, notes, history and visits |
+| **Bookings**, **Messages** (hosts) | Requests, upcoming, past, cancelled; accept, decline, check in, message the guest |
+| **More** | Visits, Clients, Calendar, Agents (broker admins), Performance, Commission, Subscription, switching workspace or to customer mode |
+
+**A property, end to end** (`src/app/partner/property/`):
+- **Onboard** (`new.tsx`): what it's for, the kind of property, and where it is. The map pin can
+  come from **Use my current location** (standing at the property) or a pasted Google or Apple
+  Maps link. That creates the draft, then the steps follow.
+- **Steps** (`[ref]/[step].tsx`): Location, Details (by category), Price and terms (by purpose;
+  room types for a PG; nightly prices and rules for a homestay) and Amenities, with the website's
+  fields, choices and hints (`src/partner/property-fields.ts`). The server checks everything and
+  its message shows under the field.
+- **Photos and files** (`[ref]/media.tsx`): take photos or pick them, add floor plans, videos and
+  private documents; tap one to caption it, move it (the first photo is the cover) or remove it.
+- **The property's page** (`[ref]/index.tsx`): status and the team's note, what's still missing
+  before it can be submitted, each step, **Quick edit** for a live listing (price, availability,
+  an offer; no new review), the actions open now (submit, withdraw, archive, mark sold or rented
+  with the commission worked out, mark available again), its numbers and history.
+
+**Hosting calendar**: each night's price, bookings and requests. Tap the first and last night to
+block them or give them a special price; tap a blocked night to open it again.
+
+**Profile & security** (`src/app/security.tsx`, from More or the Account tab): change the
+password, see where you're signed in and sign out everywhere else, and choose which notifications
+you get.
+
+Admin work (approvals, users, platform settings) is still on the website; Account → **Open the
+workspace** goes there.
 
 **Recording a tour on site.** On a listing:
 - **Take a 360° photo of a room** with this phone (`src/app/partner/capture/[ref].tsx`). Name the

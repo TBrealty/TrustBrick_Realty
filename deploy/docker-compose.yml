@@ -1,0 +1,94 @@
+# Trustbrick in production on one server (deploy/README.md). Run from this folder:
+#   docker compose up -d --build
+# Settings come from deploy/.env (copy .env.example). Only Caddy is reachable from outside:
+# it serves HTTPS on 80/443 with certificates from Let's Encrypt, and passes requests to the app.
+name: trustbrick
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+  app:
+    build:
+      context: ..
+      target: runner
+      args:
+        NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
+    image: trustbrick-web:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@postgres:5432/trustbrick
+      NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
+      BETTER_AUTH_URL: https://${DOMAIN}
+      STITCHER_URL: http://stitcher:8090
+    # Only this server can reach it directly (scheduled jobs, troubleshooting); everyone else goes through Caddy.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # Uploads when STORAGE_DRIVER=local; unused with S3.
+      - uploads:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trustbrick
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      TRUSTBRICK_OWNER_PASSWORD: ${TRUSTBRICK_OWNER_PASSWORD}
+      TRUSTBRICK_APP_PASSWORD: ${TRUSTBRICK_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trustbrick"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Joins the app's guided 360° photos into panoramas (stitcher/README.md).
+  stitcher:
+    build: ../stitcher
+    restart: unless-stopped
+    mem_limit: 2g
+
+  # Migrations, seeds and the admin bootstrap (deploy.sh runs these). Not a long-running service.
+  tools:
+    profiles: ["tools"]
+    build:
+      context: ..
+      target: tools
+    image: trustbrick-tools:latest
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@postgres:5432/trustbrick
+      DATABASE_URL_MIGRATIONS: postgres://trustbrick_owner:${TRUSTBRICK_OWNER_PASSWORD}@postgres:5432/trustbrick
+      BETTER_AUTH_URL: https://${DOMAIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:
+  pgdata:
+  uploads:

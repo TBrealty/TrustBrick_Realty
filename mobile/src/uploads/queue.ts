@@ -16,7 +16,7 @@ import { API_ORIGIN } from "@/config";
  * (the server joins them into a 360° photo).
  */
 
-export type UploadKind = "panorama" | "model_3d" | "capture";
+export type UploadKind = "panorama" | "model_3d" | "capture" | "photo" | "floor_plan" | "video" | "document";
 export type CaptureShot = { uri: string; yaw: number; pitch: number; roll: number };
 export type QueuedUpload = {
   id: string;

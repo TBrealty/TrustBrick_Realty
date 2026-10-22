@@ -71,7 +71,7 @@ export default function PartnerListingScreen() {
   const { ref } = useLocalSearchParams<{ ref: string }>();
   const c = useColors();
   const queryClient = useQueryClient();
-  const uploads = useUploads(ref);
+  const uploads = useUploads(ref).filter((u) => u.kind === "panorama" || u.kind === "model_3d" || u.kind === "capture");
   const [more, setMore] = useState(false);
   const listing = useQuery({
     queryKey: ["partner-listing", ref],

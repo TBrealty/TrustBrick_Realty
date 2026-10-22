@@ -220,6 +220,7 @@ export type PartnerSummary = {
   bookings: { counts: Record<BookingGroup, number>; requests: HostBooking[] } | null;
   inbox: { unread: number } | null;
   listings: Record<string, number> | null;
+  can: { onboard: boolean; performance: boolean; clients: boolean; team: boolean; commission: boolean; subscription: boolean; calendar: boolean };
 };
 
 export type PartnerListingRow = {

@@ -82,7 +82,7 @@ export function storage(): StorageDriver {
   if (process.env.NODE_ENV === "production" && !process.env.STORAGE_LOCAL_DIR) {
     throw new Error("Local storage in production needs STORAGE_LOCAL_DIR pointing at a persistent volume, or an object-storage driver.");
   }
-  driver = new LocalDriver(path.resolve(process.env.STORAGE_LOCAL_DIR ?? ".data/storage"));
+  driver = new LocalDriver(path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_LOCAL_DIR ?? ".data/storage"));
   return driver;
 }
 

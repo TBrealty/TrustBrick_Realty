@@ -5,6 +5,7 @@ import { FlatList, Pressable, RefreshControl, ScrollView, View } from "react-nat
 import { api, query } from "@/api/client";
 import type { BookingGroup, HostBooking, Page } from "@/api/types";
 import { useSession } from "@/auth/session";
+import { useTabBarSpace } from "@/components/tab-bar";
 import { Badge, Body, Chip, Display, EmptyState, ErrorState, Loading, Screen, Small } from "@/components/ui";
 import { formatDateTime, formatDay, formatPrice } from "@/lib/format";
 import { BOOKING_STATUS_TONES, nightsLabel } from "@/lib/stays/labels";
@@ -20,6 +21,7 @@ const GROUPS: [BookingGroup, string][] = [
 /** Bookings for the host's stays: requests to answer first, then upcoming arrivals. */
 export default function Bookings() {
   const c = useColors();
+  const space = useTabBarSpace();
   const { workspace } = useSession();
   const [group, setGroup] = useState<BookingGroup>("requests");
   const list = useQuery({
@@ -30,7 +32,7 @@ export default function Bookings() {
   return (
     <Screen>
       <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 12 }}>
-        <Display size={32}>Bookings</Display>
+        <Display size={34}>Bookings</Display>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {GROUPS.map(([key, label]) => (
             <Chip key={key} label={list.data && list.data.counts[key] ? `${label} ${list.data.counts[key]}` : label} selected={group === key} onPress={() => setGroup(key)} />
@@ -45,7 +47,7 @@ export default function Bookings() {
         <FlatList
           data={list.data.rows}
           keyExtractor={(b) => b.referenceId}
-          contentContainerStyle={{ padding: 16, gap: 2, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 2, flexGrow: 1, paddingBottom: space }}
           refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => list.refetch()} tintColor={c.brick} />}
           renderItem={({ item }) => (
             <Link href={`/partner/booking/${item.referenceId}`} asChild>

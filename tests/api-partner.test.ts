@@ -102,6 +102,8 @@ describe("an agent's leads and visits", () => {
     const home = await call(summary.GET, "/api/v1/partner/summary", { token: agentToken });
     expect(home.status).toBe(200);
     expect(home.body.data).toMatchObject({ leads: { new: 1, open: 1 }, visits: { upcoming: 1 }, bookings: { counts: { requests: 0 } } });
+    // The app's menus follow the role, as the website's sidebar: an agent onboards and has clients, but no team or calendar.
+    expect(home.body.data!.can).toMatchObject({ onboard: true, clients: true, team: false, calendar: false, commission: true });
 
     const list = await call(leads.GET, "/api/v1/partner/leads?open=1", { token: agentToken });
     expect((list.body.data!.rows as { referenceId: string }[]).map((r) => r.referenceId)).toEqual([leadReferenceId]);
@@ -131,7 +133,7 @@ describe("a host's bookings and inbox", () => {
     const { referenceId } = await createBooking({ userId: guest.id, email: guest.email }, stay, { checkIn: day(20), checkOut: day(22), adults: "2", children: "0", name: "Partner Guest", phone: "98765 55555", agree: "on" }, ctx);
 
     const home = await call(summary.GET, "/api/v1/partner/summary", { token: hostToken });
-    expect(home.body.data).toMatchObject({ leads: null, bookings: { counts: { requests: 1 } } });
+    expect(home.body.data).toMatchObject({ leads: null, bookings: { counts: { requests: 1 } }, can: { onboard: true, calendar: true, clients: false, team: false, performance: false } });
     const requests = await call(bookings.GET, "/api/v1/partner/bookings?group=requests", { token: hostToken });
     expect((requests.body.data!.rows as { referenceId: string }[]).map((r) => r.referenceId)).toContain(referenceId);
 

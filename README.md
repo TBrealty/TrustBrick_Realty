@@ -273,8 +273,9 @@ npx next start -p 3100
 | `DATABASE_URL_MIGRATIONS` | For migrations | — | Connection string **drizzle-kit** uses. Connects as `trustbrick_owner`, which owns the schema. Never used by the running app. |
 | `BETTER_AUTH_URL` | Yes | — | The site's public URL. Used to build links in confirmation and reset emails. |
 | `BETTER_AUTH_SECRET` | Yes | — | At least 32 random characters. Signs sessions and tokens, and keys the anonymised listing-view counter. Changing it logs everyone out. |
-| `STORAGE_DRIVER` | No | `local` | Where uploaded photos, videos and documents go. Only `local` exists today; an S3-compatible driver plugs into `lib/storage`. |
+| `STORAGE_DRIVER` | No | `local` | Where uploaded photos, videos and documents go: `local`, or `s3` (S3, R2, MinIO; settings in `.env.example`). On EC2, S3 uses the server's IAM role, so no keys are needed. |
 | `STORAGE_LOCAL_DIR` | In production | `.data/storage` | Folder for uploads with the local driver (git-ignored). **In production it must be set explicitly** to a persistent volume, or uploads and media are refused. |
+| `EMAIL_DRIVER`, `EMAIL_FROM`, `SES_REGION` | In production | — | `ses` sends email through Amazon SES from `EMAIL_FROM` (an address on a domain verified in SES). In development, emails go to `/dev/mailbox` instead. |
 | `TEST_DATABASE_SUPERUSER_URL` | No | local `postgres` superuser | Used only by `npm run test` to create and drop the `trustbrick_test` database. |
 
 All of these live in `.env.local` (git-ignored). `.env.example` lists them without secrets. The server validates them at
@@ -913,6 +914,11 @@ artwork into `public/images/brand/` and swap it in there when it's available.
 
 The site now needs a Node.js server and a PostgreSQL database.
 
+**On AWS (the chosen setup):** [deploy/README.md](deploy/README.md) walks through it end to end:
+- one EC2 server running Docker (Caddy for HTTPS, the site, PostGIS and the stitcher), from `deploy/docker-compose.yml` and the root `Dockerfile`;
+- uploads in S3 and email through Amazon SES, both using the server's IAM role;
+- the domain at GoDaddy, and updates with `bash deploy/deploy.sh`.
+
 - **Vercel:** import the repository and set every variable from [Environment variables](#environment-variables).
 - **Any Node.js host:** run `npm install`, then `npm run build`, then `npm run start`, behind your reverse proxy.
 - **Database:** any managed PostgreSQL that supports PostGIS (Neon, Supabase and AWS RDS do). Enable the extensions
@@ -921,8 +927,8 @@ The site now needs a Node.js server and a PostgreSQL database.
 
 **Before going live, these are required, not optional:**
 
-1. **Connect an email provider.** Without one, confirmation and reset emails are logged as an error and never
-   delivered, so nobody can finish signing up. Add it in `lib/email/send.ts`.
+1. **Connect email.** Set `EMAIL_DRIVER=ses` and `EMAIL_FROM` (Amazon SES, `lib/email/send.ts`). Without them,
+   confirmation and reset emails are logged as an error and never delivered, so nobody can finish signing up.
 2. **Serve over HTTPS**, so session cookies are marked Secure.
 3. **Make your proxy overwrite `X-Forwarded-For`.** Rate limits per IP trust this header. If the proxy passes a
    client's own value through, an attacker can spoof it. (Per-account limits still hold either way.)

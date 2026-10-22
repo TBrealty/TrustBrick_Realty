@@ -3,59 +3,15 @@ import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { ApiError, api } from "@/api/client";
-import type { LeadDetail, VisitRow } from "@/api/types";
-import { SlotPicker } from "@/components/slot-picker";
+import type { LeadDetail } from "@/api/types";
+import { VisitCard } from "@/partner/visit-card";
 import { Badge, Body, Button, Card, Chip, Display, Divider, ErrorState, Eyebrow, Field, Loading, Notice, Scroll, Small, Title } from "@/components/ui";
-import { LEAD_STATUS_LABELS, LEAD_TRANSITIONS, type LeadStatus, VISIT_ACTIONS, VISIT_STATUS_LABELS, type VisitAction } from "@/lib/crm/terms";
+import { LEAD_STATUS_LABELS, LEAD_TRANSITIONS, type LeadStatus } from "@/lib/crm/terms";
 import { formatDateTime, relativeTime } from "@/lib/format";
 import { leadTone } from "@/components/tones";
 
 const digits = (phone: string) => phone.replace(/[^\d]/g, "").replace(/^0+/, "");
 const whatsapp = (phone: string) => `https://wa.me/${digits(phone).length === 10 ? `91${digits(phone)}` : digits(phone)}`;
-
-function VisitCard({ visit, onChanged }: { visit: VisitRow; onChanged: () => void }) {
-  const [scheduling, setScheduling] = useState(false);
-  const [when, setWhen] = useState<string | null>(null);
-  const act = useMutation({
-    mutationFn: (action: VisitAction) => api(`/partner/visits/${visit.referenceId}`, { method: "POST", body: { action, scheduledAt: when ?? undefined } }),
-    onSuccess: () => {
-      setScheduling(false);
-      onChanged();
-    },
-  });
-  const actions = (Object.keys(VISIT_ACTIONS) as VisitAction[]).filter((a) => (VISIT_ACTIONS[a].from as readonly string[]).includes(visit.status));
-  return (
-    <Card style={{ padding: 12 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-        <Body style={{ flex: 1 }}>{visit.scheduledAt ? `Confirmed: ${formatDateTime(visit.scheduledAt)}` : visit.requestedFor ? `Asked for ${formatDateTime(visit.requestedFor)}` : "Visit"}</Body>
-        <Badge label={VISIT_STATUS_LABELS[visit.status]} tone={visit.status === "requested" ? "warning" : visit.status === "scheduled" ? "info" : "neutral"} />
-      </View>
-      {act.isError && <Notice>{(act.error as Error).message}</Notice>}
-      {scheduling ? (
-        <>
-          <SlotPicker onChange={setWhen} />
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button label="Confirm this time" compact disabled={!when} loading={act.isPending} onPress={() => act.mutate("schedule")} />
-            <Button label="Back" variant="ghost" compact onPress={() => setScheduling(false)} />
-          </View>
-          <Small>The customer is told straight away.</Small>
-        </>
-      ) : (
-        actions.length > 0 && (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {actions.map((a) =>
-              a === "schedule" ? (
-                <Button key={a} label={visit.status === "scheduled" ? "Change the time" : "Confirm a time"} compact onPress={() => setScheduling(true)} />
-              ) : (
-                <Button key={a} label={VISIT_ACTIONS[a].label} variant={a === "cancel" ? "danger" : "secondary"} compact loading={act.isPending && act.variables === a} onPress={() => act.mutate(a)} />
-              ),
-            )}
-          </View>
-        )
-      )}
-    </Card>
-  );
-}
 
 /** One lead: reach the person, move the lead along, confirm visits and keep notes. */
 export default function LeadScreen() {

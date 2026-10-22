@@ -27,10 +27,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
   const dark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
   const [width, setWidth] = useState(0);
-  const itemWidth = width / state.routes.length;
+  // Tabs hidden with `href: null` (a role that doesn't have them) take no room.
+  const routes = state.routes.filter((r) => StyleSheet.flatten(descriptors[r.key].options.tabBarItemStyle)?.display !== "none");
+  const current = Math.max(
+    routes.findIndex((r) => r.key === state.routes[state.index]?.key),
+    0,
+  );
+  const itemWidth = width / Math.max(routes.length, 1);
   const pill = useAnimatedStyle(() => ({
     width: Math.max(itemWidth - 12, 0),
-    transform: [{ translateX: withSpring(state.index * itemWidth + 6, { damping: 20, stiffness: 220, mass: 0.7 }) }],
+    transform: [{ translateX: withSpring(current * itemWidth + 6, { damping: 20, stiffness: 220, mass: 0.7 }) }],
   }));
 
   return (
@@ -44,9 +50,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) 
           )}
           <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
             {width > 0 && <Animated.View style={[{ position: "absolute", top: 8, bottom: 8, borderRadius: 24, backgroundColor: c.brickSoft }, pill]} />}
-            {state.routes.map((route, index) => {
+            {routes.map((route) => {
               const { options } = descriptors[route.key];
-              const focused = state.index === index;
+              const focused = state.routes[state.index]?.key === route.key;
               const color = focused ? c.brick : c.muted;
               const label = typeof options.title === "string" ? options.title : route.name;
               const badge = options.tabBarBadge;

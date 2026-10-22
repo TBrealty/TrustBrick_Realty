@@ -7,9 +7,10 @@ import type { StorageDriver } from "./index";
  * private in the bucket; the /media route reads them and decides who may see each one, so
  * documents and virtual tours keep their access checks.
  *
- * STORAGE_DRIVER=s3 with S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, and S3_REGION
- * ("auto" for R2) or S3_ENDPOINT (R2: https://<account>.r2.cloudflarestorage.com).
- * S3_FORCE_PATH_STYLE=true for MinIO.
+ * STORAGE_DRIVER=s3 with S3_BUCKET, and S3_REGION ("auto" for R2) or S3_ENDPOINT
+ * (R2: https://<account>.r2.cloudflarestorage.com). S3_FORCE_PATH_STYLE=true for MinIO.
+ * S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are needed except on AWS, where they can be left out
+ * and the server's IAM role is used (EC2 instance profile).
  */
 export class S3Driver implements StorageDriver {
   readonly provider = "s3" as const;
@@ -17,13 +18,14 @@ export class S3Driver implements StorageDriver {
 
   constructor(
     private readonly bucket: string,
-    config: { region: string; endpoint?: string; accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean },
+    config: { region: string; endpoint?: string; accessKeyId?: string; secretAccessKey?: string; forcePathStyle: boolean },
   ) {
     this.client = new S3Client({
       region: config.region,
       endpoint: config.endpoint,
       forcePathStyle: config.forcePathStyle,
-      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      // Without keys, the SDK's default chain applies (the EC2 server's IAM role).
+      credentials: config.accessKeyId && config.secretAccessKey ? { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } : undefined,
     });
   }
 
@@ -36,8 +38,8 @@ export class S3Driver implements StorageDriver {
     return new S3Driver(need("S3_BUCKET"), {
       region: process.env.S3_REGION ?? "auto",
       endpoint: process.env.S3_ENDPOINT || undefined,
-      accessKeyId: need("S3_ACCESS_KEY_ID"),
-      secretAccessKey: need("S3_SECRET_ACCESS_KEY"),
+      accessKeyId: process.env.S3_ACCESS_KEY_ID || undefined,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || undefined,
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
     });
   }

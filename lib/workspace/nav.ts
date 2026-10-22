@@ -122,7 +122,7 @@ const allowed = (actor: Actor, item: NavDef) =>
   (Array.isArray(item.permission) ? item.permission : [item.permission]).some((p) => can(actor, p, item.atLeast ?? "own"));
 
 /** Agents see the hosting pages only once they have a stay; hosts always do. */
-async function hosts(actor: Actor): Promise<boolean> {
+export async function hosts(actor: Actor): Promise<boolean> {
   if (actor.roles.includes("host")) return true;
   if (actor.workspace !== "professional" || !can(actor, "listings.view")) return false;
   const { rows } = await db.execute(sql`

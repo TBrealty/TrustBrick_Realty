@@ -17,10 +17,20 @@ export function routeFor(link: string | null | undefined): Href | null {
   if (path === "/account/saved") return "/saved";
   // Partner mode: an agent's or host's notifications.
   if ((m = /^\/leads\/(LEAD-[A-Z0-9]+)$/.exec(path))) return `/partner/lead/${m[1]}`;
-  if (path === "/leads" || path === "/visits") return "/leads";
+  if (path === "/leads") return "/leads";
   if ((m = /^\/bookings\/(BKG-[A-Z0-9]+)$/.exec(path))) return `/partner/booking/${m[1]}`;
   if (path === "/bookings") return "/bookings";
   if ((m = /^\/messages\/(MSG-[A-Z0-9]+)$/.exec(path))) return `/partner/conversation/${m[1]}`;
-  if ((m = /^\/properties\/(LST-[A-Z0-9]+)(\/tour|\/edit)?$/.exec(path))) return `/partner/listing/${m[1]}`;
+  if ((m = /^\/properties\/(LST-[A-Z0-9]+)\/tour$/.exec(path))) return `/partner/listing/${m[1]}`;
+  if ((m = /^\/properties\/(LST-[A-Z0-9]+)(\/edit)?$/.exec(path))) return `/partner/property/${m[1]}`;
+  if (path === "/properties") return "/listings";
+  if (path === "/properties/new") return "/partner/property/new";
+  if (path === "/visits") return "/partner/visits";
+  if (path === "/contacts") return "/partner/clients";
+  if (path === "/calendar") return "/partner/calendar";
+  if (path === "/commission") return "/partner/commission";
+  if (path === "/subscription") return "/partner/subscription";
+  if (path === "/analytics") return "/partner/performance";
+  if (path === "/agents") return "/partner/team";
   return null;
 }

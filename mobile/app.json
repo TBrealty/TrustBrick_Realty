@@ -65,6 +65,12 @@
         {
           "motionPermission": "Trustbrick uses motion to guide you while taking a 360° photo of a room."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Trustbrick uses your location to pin a property on the map while you're there."
+        }
       ]
     ],
     "experiments": {

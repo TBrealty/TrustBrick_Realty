@@ -91,6 +91,20 @@ export default function RootLayout() {
             <Stack.Screen name="partner/tour/[ref]" options={{ title: "Tour preview" }} />
             <Stack.Screen name="partner/capture/[ref]" options={{ headerShown: false, animation: "fade", orientation: "portrait", gestureEnabled: false }} />
             <Stack.Screen name="partner/model-guide" options={{ title: "3D models" }} />
+            <Stack.Screen name="partner/property/new" options={{ title: "Onboard a property" }} />
+            <Stack.Screen name="partner/property/[ref]/index" options={{ title: "" }} />
+            <Stack.Screen name="partner/property/[ref]/[step]" options={{ title: "Edit" }} />
+            <Stack.Screen name="partner/property/[ref]/media" options={{ title: "Photos and files" }} />
+            <Stack.Screen name="partner/property/[ref]/terms" options={{ title: "Quick edit", presentation: "modal" }} />
+            <Stack.Screen name="partner/visits" options={{ title: "Visits" }} />
+            <Stack.Screen name="partner/clients" options={{ title: "Clients" }} />
+            <Stack.Screen name="partner/calendar" options={{ title: "Calendar" }} />
+            <Stack.Screen name="partner/team/index" options={{ title: "Agents" }} />
+            <Stack.Screen name="partner/team/[ref]" options={{ title: "Agent" }} />
+            <Stack.Screen name="partner/commission" options={{ title: "Commission" }} />
+            <Stack.Screen name="partner/subscription" options={{ title: "Subscription" }} />
+            <Stack.Screen name="partner/performance" options={{ title: "Performance" }} />
+            <Stack.Screen name="security" options={{ title: "Profile & security" }} />
           </Stack>
         </ThemeProvider>
       </SessionProvider>
