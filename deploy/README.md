@@ -202,7 +202,7 @@ sed "s|REPO|$HOME/trustbrick|g" ~/trustbrick/deploy/crontab | crontab -
 
 1. **SES → Identities → Create identity → Domain** → `trustbrick.org`, with **Easy DKIM** (RSA 2048).
 2. SES shows **three CNAME records**. Add each in GoDaddy DNS, using the name without the `.trustbrick.org` ending. SES marks the domain *Verified* once they're seen.
-3. Add a **TXT** record in GoDaddy: name `_dmarc`, value `v=DMARC1; p=none; rua=mailto:you@yourmail.com`.
+3. **DMARC:** trustbrick.org already has a `_dmarc` TXT record (`p=quarantine`), which works with SES. Keep it, and never add a second one: two `_dmarc` records cancel each other out.
 4. New SES accounts are in a **sandbox**: they can only send to addresses you've verified.
    - While waiting, verify your own address under **Identities → Create identity → Email address**.
    - Then **SES → Account dashboard → Request production access**: say it's transactional email (sign-up confirmation, password resets, booking and lead notifications), with no marketing. Approval usually takes about a day.
