@@ -17,9 +17,6 @@ git -C .. pull --ff-only
 echo "▸ Building (a few minutes)"
 docker compose build app tools stitcher
 
-echo "▸ Starting the database"
-docker compose up -d postgres
-
 echo "▸ Updating the database"
 docker compose run --rm tools npm run db:migrate
 docker compose run --rm tools npm run db:seed:reference

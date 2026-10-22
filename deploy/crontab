@@ -7,6 +7,3 @@ SHELL=/bin/bash
 
 # 360° photos still waiting to be made, every 5 minutes.
 */5 * * * * cd REPO/deploy && set -a && . ./.env && curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/internal/captures
-
-# Database backup, every night at 02:30 IST (21:00 UTC).
-0 21 * * * bash REPO/deploy/backup.sh >> REPO/deploy/backups/backup.log 2>&1

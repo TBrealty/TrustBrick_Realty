@@ -1,7 +1,8 @@
-# Trustbrick in production on one server (deploy/README.md). Run from this folder:
+# Trustbrick in production (deploy/README.md). Run from this folder:
 #   docker compose up -d --build
 # Settings come from deploy/.env (copy .env.example). Only Caddy is reachable from outside:
 # it serves HTTPS on 80/443 with certificates from Let's Encrypt, and passes requests to the app.
+# The database is Amazon RDS (DB_HOST), reached over an encrypted, verified connection.
 name: trustbrick
 
 services:
@@ -32,7 +33,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@postgres:5432/trustbrick
+      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@${DB_HOST}:5432/trustbrick?sslmode=verify-full
       NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
       BETTER_AUTH_URL: https://${DOMAIN}
       STITCHER_URL: http://stitcher:8090
@@ -42,28 +43,6 @@ services:
     volumes:
       # Uploads when STORAGE_DRIVER=local; unused with S3.
       - uploads:/data/storage
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  postgres:
-    image: postgis/postgis:17-3.5
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: trustbrick
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
-      TRUSTBRICK_OWNER_PASSWORD: ${TRUSTBRICK_OWNER_PASSWORD}
-      TRUSTBRICK_APP_PASSWORD: ${TRUSTBRICK_APP_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../db/init:/docker-entrypoint-initdb.d:ro
-    shm_size: 256m
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d trustbrick"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
 
   # Joins the app's guided 360° photos into panoramas (stitcher/README.md).
   stitcher:
@@ -80,15 +59,11 @@ services:
     image: trustbrick-tools:latest
     env_file: .env
     environment:
-      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@postgres:5432/trustbrick
-      DATABASE_URL_MIGRATIONS: postgres://trustbrick_owner:${TRUSTBRICK_OWNER_PASSWORD}@postgres:5432/trustbrick
+      DATABASE_URL: postgres://trustbrick_app:${TRUSTBRICK_APP_PASSWORD}@${DB_HOST}:5432/trustbrick?sslmode=verify-full
+      DATABASE_URL_MIGRATIONS: postgres://trustbrick_owner:${TRUSTBRICK_OWNER_PASSWORD}@${DB_HOST}:5432/trustbrick?sslmode=verify-full
       BETTER_AUTH_URL: https://${DOMAIN}
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   caddy-data:
   caddy-config:
-  pgdata:
   uploads:

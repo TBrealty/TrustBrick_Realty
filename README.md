@@ -915,7 +915,7 @@ artwork into `public/images/brand/` and swap it in there when it's available.
 The site now needs a Node.js server and a PostgreSQL database.
 
 **On AWS (the chosen setup):** [deploy/README.md](deploy/README.md) walks through it end to end:
-- one EC2 server running Docker (Caddy for HTTPS, the site, PostGIS and the stitcher), from `deploy/docker-compose.yml` and the root `Dockerfile`;
+- one EC2 server running Docker (Caddy for HTTPS, the site and the stitcher), from `deploy/docker-compose.yml` and the root `Dockerfile`, with the database on Amazon RDS for PostgreSQL;
 - uploads in S3 and email through Amazon SES, both using the server's IAM role;
 - the domain at GoDaddy, and updates with `bash deploy/deploy.sh`.
 

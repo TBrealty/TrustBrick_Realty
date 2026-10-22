@@ -4,10 +4,14 @@
 #   runner   just the built server (Next.js standalone output), what runs in production
 #
 # NEXT_PUBLIC_SITE_URL is fixed into the browser code at build time, so pass the real address:
-#   docker build --build-arg NEXT_PUBLIC_SITE_URL=https://trustbrick.in .
+#   docker build --build-arg NEXT_PUBLIC_SITE_URL=https://trustbrick.org .
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
+# Amazon RDS's certificates, so connections to the database are encrypted and verified
+# (DATABASE_URL ends in ?sslmode=verify-full).
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
@@ -28,7 +32,9 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:5432/build \
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
-ENV NODE_ENV=production \
+COPY --from=deps /etc/ssl/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem \
+    NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
     PORT=3000

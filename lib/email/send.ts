@@ -25,7 +25,7 @@ export function capturedEmails(): CapturedEmail[] {
  * The single seam for outbound email.
  *
  * Production sends through Amazon SES when EMAIL_DRIVER=ses: EMAIL_FROM is the sender (an
- * address on a domain verified in SES, e.g. `Trustbrick <no-reply@trustbrick.in>`) and
+ * address on a domain verified in SES, e.g. `Trustbrick <no-reply@trustbrick.org>`) and
  * SES_REGION the SES region. On EC2 the server's IAM role supplies the credentials; elsewhere
  * the usual AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY work.
  */

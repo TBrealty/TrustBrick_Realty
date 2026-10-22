@@ -1,28 +1,28 @@
 # Putting Trustbrick live on AWS
 
-One EC2 server runs everything, in Docker:
+One EC2 server runs the site, in Docker; the data lives in managed AWS services:
 
 ```
- visitors ──► your domain (GoDaddy DNS) ──► Elastic IP ──► EC2 server (Ubuntu 24.04)
-                                                     ├─ Caddy       HTTPS, certificates from Let's Encrypt
-                                                     ├─ app         the website and the app's API (Next.js)
-                                                     ├─ postgres    the database (PostGIS)
-                                                     └─ stitcher    joins the app's 360° photos
- S3 bucket ◄── uploads (photos, videos, documents, tours) and nightly database backups
+ visitors ──► trustbrick.org (GoDaddy DNS) ──► Elastic IP ──► EC2 server (Ubuntu 24.04)
+                                                        ├─ Caddy       HTTPS, certificates from Let's Encrypt
+                                                        ├─ app         the website and the app's API (Next.js)
+                                                        └─ stitcher    joins the app's 360° photos
+ Amazon RDS for PostgreSQL ◄── the database (PostGIS), private to the server, automatic backups
+ S3 bucket ◄── uploads (photos, videos, documents, tours)
  Amazon SES ◄── emails (sign-up confirmation, password reset, notifications)
 ```
 
-The server reaches S3 and SES through an **IAM role**, so no AWS keys are stored anywhere.
+The server reaches S3 and SES through an **IAM role**, so no AWS keys are stored anywhere. The
+database is reachable only from the server, over an encrypted connection.
 
 **Roughly what it costs** (Mumbai region; check the [AWS pricing calculator](https://calculator.aws/)):
 - the server: t3.medium is about $30 a month, t3.large about $60;
-- 40 GB of disk: about $4;
+- the database: db.t4g.micro is about $15 a month, db.t4g.small about $30, plus about $3 for 20 GB of storage;
+- 40 GB of server disk: about $4;
 - the Elastic IP: about $4;
 - S3 and SES: a few dollars at the start.
 
-The domain is paid to GoDaddy.
-
-Below, `trustbrick.in` stands for your domain. Replace it everywhere.
+The domain, **trustbrick.org**, is paid to GoDaddy.
 
 ---
 
@@ -80,6 +80,33 @@ Then attach a fixed address:
 2. **Actions → Associate** it with the `trustbrick` instance.
 3. Note the IP: your domain will point to it.
 
+## 3b. The database (Amazon RDS for PostgreSQL)
+
+**Check its settings:** RDS → Databases → your database. It should have:
+
+| Setting | Should be |
+| --- | --- |
+| Region | **ap-south-1** (Mumbai), the same as the server |
+| Engine | **PostgreSQL 16 or 17** (not Aurora) |
+| Instance class | **db.t4g.micro** or **db.t4g.small** to start; resize later in a few minutes |
+| Multi-AZ | Off to start (it doubles the cost); turn on when the business depends on it |
+| VPC | The **same VPC** as the server |
+| Public access | **No** |
+| Automated backups | On, **7 days** or more |
+| Deletion protection | **On** |
+
+Change anything with **Modify**, choosing **Apply immediately**.
+
+**Let only the server in.**
+1. Under **Connectivity & security**, open the database's **VPC security group** → **Edit inbound rules**.
+2. Delete any other rules, then add one: type **PostgreSQL** (5432), source **Custom**, and pick the server's security group (`trustbrick-web`, starting `sg-`).
+3. **Save rules.**
+
+Now only the Trustbrick server can connect, nothing else on the internet.
+
+**Note the endpoint** under Connectivity & security (like `trustbrick.xxxx.ap-south-1.rds.amazonaws.com`),
+the master username (usually `postgres`) and the master password you chose. They go in `.env` in step 6.
+
 ## 4. Point the domain at the server (GoDaddy)
 
 GoDaddy → **My Products → your domain → DNS**:
@@ -93,7 +120,7 @@ Remove GoDaddy's default **A @ "Parked"** record if there is one. Changes usuall
 minutes, sometimes an hour. Check from your PC:
 
 ```bash
-nslookup trustbrick.in
+nslookup trustbrick.org
 ```
 
 It's ready when it answers with your Elastic IP.
@@ -139,31 +166,42 @@ nano .env
 ```
 
 Fill in `.env`; the comments in it explain each line.
-- **Secrets:** for each secret and password, run `openssl rand -base64 32 | tr -d '/+=' | head -c 40` and paste the result.
+- **Secrets:** for each secret and password except `DB_MASTER_PASSWORD`, run `openssl rand -base64 32 | tr -d '/+=' | head -c 40` and paste the result.
+- **Database:** `DB_HOST`, `DB_MASTER_USER` and `DB_MASTER_PASSWORD` come from step 3b.
 - **Storage:** `S3_BUCKET` is the bucket from step 2.
 - **Email:** `EMAIL_FROM` is an address on your domain (step 7 verifies it).
 
-Then start everything. **DNS from step 4 must already point here**, or Caddy can't get the HTTPS certificate:
+Save with **Ctrl+O, Enter**, then exit with **Ctrl+X**.
+
+**Prepare the database, once:**
+
+```bash
+bash rds-init.sh
+```
+
+It creates the `trustbrick` database, turns on PostGIS and the other extensions, and creates
+the site's two logins. If it can't connect, check the security-group rule from step 3b.
+
+**Start everything.** DNS from step 4 must already point here, or Caddy can't get the HTTPS certificate:
 
 ```bash
 bash deploy.sh
 ```
 
-The first run takes several minutes. It builds the images, creates the database, applies the
-migrations and loads the reference data (roles, property types, cities). Open
-`https://trustbrick.in`: it should load with a padlock.
+The first run takes several minutes. It builds the images, creates the tables and loads the
+reference data (roles, property types, cities). Open `https://trustbrick.org`: it should load
+with a padlock.
 
-**Scheduled jobs** (pending push notifications, 360° photos, nightly backups):
+**Scheduled jobs** (pending push notifications and 360° photos):
 
 ```bash
-mkdir -p ~/trustbrick/deploy/backups
 sed "s|REPO|$HOME/trustbrick|g" ~/trustbrick/deploy/crontab | crontab -
 ```
 
 ## 7. Email (Amazon SES)
 
-1. **SES → Identities → Create identity → Domain** → `trustbrick.in`, with **Easy DKIM** (RSA 2048).
-2. SES shows **three CNAME records**. Add each in GoDaddy DNS, using the name without the `.trustbrick.in` ending. SES marks the domain *Verified* once they're seen.
+1. **SES → Identities → Create identity → Domain** → `trustbrick.org`, with **Easy DKIM** (RSA 2048).
+2. SES shows **three CNAME records**. Add each in GoDaddy DNS, using the name without the `.trustbrick.org` ending. SES marks the domain *Verified* once they're seen.
 3. Add a **TXT** record in GoDaddy: name `_dmarc`, value `v=DMARC1; p=none; rua=mailto:you@yourmail.com`.
 4. New SES accounts are in a **sandbox**: they can only send to addresses you've verified.
    - While waiting, verify your own address under **Identities → Create identity → Email address**.
@@ -179,7 +217,7 @@ cd ~/trustbrick/deploy
 docker compose run --rm tools npm run admin:bootstrap -- --email you@yourmail.com
 ```
 
-Then sign in: the admin workspace is at `https://trustbrick.in/dashboard`.
+Then sign in: the admin workspace is at `https://trustbrick.org/dashboard`.
 
 ---
 
@@ -201,25 +239,21 @@ seconds while the new version starts.
 | See what's running | `docker compose ps` |
 | Read the site's logs | `docker compose logs -f --tail=200 app` |
 | Restart the site | `docker compose restart app` |
-| Open the database | `docker compose exec postgres psql -U postgres -d trustbrick` |
-| Back up now | `bash backup.sh` |
+| Open the database | `set -a; . ./.env; set +a; docker run --rm -it -v "$PWD/rds-ca.pem:/ca.pem:ro" postgres:17-alpine psql "host=$DB_HOST user=$DB_MASTER_USER dbname=trustbrick sslmode=verify-full sslrootcert=/ca.pem"` (asks for the master password) |
 
 ## Backups
 
-- **Database:** nightly at 02:30 IST, to `s3://BACKUP_S3_BUCKET/db-backups/`. The server also keeps the last 7 in `deploy/backups/`.
-- **Restore** a dump into the running database (careful: this overwrites the data):
-
-```bash
-gunzip -c backups/trustbrick-YYYYMMDD-HHMMSS.sql.gz | docker compose exec -T postgres psql -U postgres -d trustbrick
-```
-
-- **Whole server:** EC2 → **Lifecycle Manager** → create a daily EBS snapshot policy for the instance's volume, keeping 7.
-- **Uploads** are in S3 with versioning, so they survive even if the server doesn't.
+- **Database:** RDS backs it up automatically and can restore it **to any minute** in the retention period (7 days or more, step 3b).
+  - To restore: **RDS → Databases → your database → Actions → Restore to point in time**. That makes a new database; point `DB_HOST` at it and run `bash deploy.sh`.
+  - Take a manual snapshot (**Actions → Take snapshot**) before big changes.
+- **Uploads:** in S3 with versioning, so they survive even if the server doesn't.
+- **The server itself** holds nothing that can't be rebuilt from GitHub and `.env`. Keep a copy of `.env` somewhere safe, such as a password manager.
 
 ## The phone app
 
-Once the site is live, build the app against it. Set `EXPO_PUBLIC_API_URL=https://trustbrick.in` for the
-EAS build (mobile/README.md → Building). With that set, the app no longer needs the cable.
+Once the site is live, build the app with EAS (mobile/README.md → Building). The `preview` and
+`production` profiles in `mobile/eas.json` already point the app at `https://trustbrick.org`, so
+an installed build works anywhere, without the cable.
 
 ## When something's wrong
 
@@ -230,3 +264,5 @@ EAS build (mobile/README.md → Building). With that set, the app no longer need
 | Confirmation emails don't arrive | `docker compose logs app \| grep email`. In the SES sandbox, only verified addresses receive mail |
 | Build stops with "killed" | Not enough memory: check swap is on (`swapon --show`), or move to t3.large |
 | Uploads fail | `S3_BUCKET` and `S3_REGION` in `.env`, and the IAM role is attached to the instance |
+| "Can't reach the database" / timeouts | The database's security group must allow 5432 from `trustbrick-web`, both must be in the same VPC, and `DB_HOST` must be the endpoint |
+| `rds-init.sh`: password authentication failed | `DB_MASTER_USER` and `DB_MASTER_PASSWORD` don't match the database. Reset the master password with **Modify** |
