@@ -9,11 +9,12 @@
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 # Amazon RDS's certificates, so connections to the database are encrypted and verified
-# (DATABASE_URL ends in ?sslmode=verify-full).
-# Readable by everyone: the website runs as the unprivileged `node` user, and Node skips a
-# certificate file it can't read (ADD from a URL makes it root-only by default).
-ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
+# (DATABASE_URL ends in ?sslmode=verify-full). Kept in a folder of their own and made readable
+# by everyone: the website runs as the unprivileged `node` user, and Node skips a certificate
+# file it can't read (ADD from a URL saves it root-only).
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/rds-global-bundle.pem
+RUN install -D -m 644 /tmp/rds-global-bundle.pem /usr/local/share/rds/global-bundle.pem && rm /tmp/rds-global-bundle.pem
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/rds/global-bundle.pem
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
@@ -34,8 +35,8 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:5432/build \
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
-COPY --from=deps --chmod=644 /etc/ssl/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem \
+COPY --from=deps /usr/local/share/rds /usr/local/share/rds
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/rds/global-bundle.pem \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
