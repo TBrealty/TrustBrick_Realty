@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 /**
  * Where email-confirmation links land. Better Auth redirects here after verifying
@@ -6,8 +6,11 @@ import { type NextRequest, NextResponse } from "next/server";
  *
  * It exists as a route handler, not a page, so a failed link is routed to a
  * helpful login message instead of being bounced by the account area's login check.
+ *
+ * The redirect is relative: behind a proxy (Caddy in production) the request's own URL is the
+ * app's internal address (0.0.0.0:3000), not the site's, so it mustn't be built from it.
  */
 export function GET(request: NextRequest) {
   const target = request.nextUrl.searchParams.has("error") ? "/login?verify=expired" : "/account/profile?welcome=1";
-  return NextResponse.redirect(new URL(target, request.url));
+  return new Response(null, { status: 307, headers: { Location: target } });
 }
