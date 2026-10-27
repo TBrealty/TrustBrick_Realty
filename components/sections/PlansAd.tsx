@@ -10,7 +10,7 @@ const FOR_PARTNERS = ["AI locality insights to share with clients", "Featured li
  */
 export function PlansAd() {
   return (
-    <section id="plans" aria-labelledby="plans-ad-title" className="surface-dark relative overflow-hidden bg-contrast py-24 text-on-contrast sm:py-32">
+    <section id="plans" aria-labelledby="plans-ad-title" className="surface-dark relative overflow-hidden bg-contrast py-20 text-on-contrast sm:py-24">
       <div aria-hidden className="pointer-events-none absolute -top-40 right-[-10%] size-[36rem] rounded-full bg-brick/20 blur-3xl" />
       <div className="shell relative grid gap-12 lg:grid-cols-12 lg:items-end">
         <div className="lg:col-span-6">
@@ -18,7 +18,7 @@ export function PlansAd() {
             <span aria-hidden className="h-px w-8 bg-current" />
             Trustbrick plans
           </p>
-          <h2 id="plans-ad-title" data-reveal="lines" className="display mt-6 text-[clamp(2.75rem,6.5vw,6rem)]">
+          <h2 id="plans-ad-title" data-reveal="lines" className="display mt-6 text-[clamp(2.5rem,5.4vw,5rem)]">
             <Lines lines={["See the neighbourhood", <>before <em>you visit.</em></>]} step={130} />
           </h2>
           <p data-reveal className="mt-6 max-w-[44ch] text-[1.0625rem] leading-relaxed text-on-contrast/75">

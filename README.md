@@ -49,18 +49,18 @@ discovery, property intelligence, professional tools, transactions, property man
 
 ## What's on the page
 
-The landing page is a single, fully static page built as an editorial, art-directed experience.
+The landing page leads with search and real listings, then explains what Trustbrick is. Dark and
+light bands alternate down the page.
 
 | # | Section | What it does |
 | --- | --- | --- |
 | — | **Navigation** | Minimal header that turns solid after scrolling and steps aside while you read, returning as soon as you scroll up. It tints itself to the section beneath (dark over the cinematic sections, ivory over the light ones), shows **Log in / Sign up**, or once logged in a **user menu** (icon and first name) with Profile, Bookmarks and Log out, and has an animated full-screen menu on mobile. |
-| — | **Hero** | Full-viewport city skyline at dusk with the headline *"Real estate, built on trust."* Includes an **"I'm looking to…"** selector that expands into Buy / Rent / Sell / Invest / Home Stay / **PGs** (a dropdown with PGs for Men and PGs for Women). |
-| 01 | **The idea** | Editorial section explaining that real-estate decisions involve people, place, value, trust, information and transactions. |
+| — | **Hero** | Full-viewport city skyline at dusk with the headline *"Real estate, built on trust."* and a **search**: Buy / Rent / PG / Stay / Invest tabs, a location (any, or one city), and a free-text box, sent to that kind's browse page. Shortcut links below (homes with 3D tours, ready to move, PGs for women, homestays, new launches), and a link for agents to join. |
+| 01 | **Explore** | Five ways in (Buy, Rent, PG, Stay, Invest), then rows of real listings: *Walk through in 3D*, *Fresh on Trustbrick* and *Homestays*. A row shows only once it has listings (`lib/listings/home.ts`, cached for a minute and shared by all visitors). |
+| — | **Plans** | Trustbrick Plus for people, and Pro & Business for agents and hosts, with free trials. |
 | 02 | **Five paths** | Find a home (→ /buy) · Home Stay or host (→ /stays) · Sell property (→ /contact, topic preset) · Build your business (→ /become-an-agent) · Invest smarter (→ /invest). On desktop, hovering a path changes the photograph beside the list. |
-| 03 | **Trustbrick Intelligence** | *"Know more before you decide."* Tabbed previews of Trustbrick Score™, Property Passport™, Trustbrick Value™ and Neighborhood Intelligence, clearly labelled as in development. |
-| 04 | **The ecosystem** | The eight participant groups drawn as a brick wall, with a slow light travelling through the mortar joints. |
-| 05 | **The road ahead** | The long-term vision: Discovery → Intelligence → Professionals → Transactions → Management → Finance. |
-| — | **Final call to action** | *"Your next property decision starts here."* with Get Started and Talk to Trustbrick. |
+| 03 | **Trustbrick Intelligence** | *"Know more before you decide."* Tabbed previews of Trustbrick Score™, Property Passport™, Trustbrick Value™ and Neighborhood Intelligence, marked *Coming soon*. |
+| 04 | **Where we're going** | The idea, who Trustbrick is for, and the road from Discovery to Finance with what's live, coming soon and later, ending with *"Your next property decision starts here."* (Search homes, Become an agent). |
 | — | **Footer** | Company name, navigation, legal links and copyright. |
 
 ---
@@ -86,7 +86,7 @@ The landing page is a single, fully static page built as an editorial, art-direc
 | Validation | [Zod](https://zod.dev) | 4.6.5 | Validates every form submission on the server |
 | IDs | [uuid](https://github.com/uuidjs/uuid) | 14.0.2 | Time-ordered UUIDv7 primary keys |
 
-The **landing page is still prerendered as static HTML**. Account pages and the auth API run on the server and talk to
+The **landing page is rendered on each request** (its listing rows come from the database, through a shared one-minute cache). Account pages and the auth API run on the server and talk to
 PostgreSQL.
 
 ---
@@ -826,7 +826,7 @@ service footer's picker so the service name and the account fit, down to 320px.
 
 **Themes.** Light is the default; dark follows the reader's device until they choose. A choice is written to
 `data-theme` on `<html>` and remembered in `localStorage`, which a small script in the root layout replays before
-the first paint, so nothing flashes and the landing page stays statically rendered. Without a choice, CSS alone
+the first paint, so nothing flashes and no page needs the theme on the server. Without a choice, CSS alone
 answers `prefers-color-scheme`, so there is no JavaScript in the way.
 
 - **Controls:** `ThemeToggle` (a `role="switch"` light ⇄ dark, in the headers) and `ThemeChoicePicker`
@@ -879,7 +879,7 @@ answers `prefers-color-scheme`, so there is no JavaScript in the way.
 - Cumulative Layout Shift: **0**.
 - Largest Contentful Paint: about 1.4s on desktop and 0.6s on mobile. The small delay comes from the headline's entrance animation.
 - The hero image is about 48 KB as AVIF. Images below the fold are lazy-loaded with responsive sizes.
-- The landing page is prerendered as static HTML; checking whether you are logged in happens in the browser, so it stays static.
+- The landing page is rendered on each request for its listing rows, from a cache shared by every visitor, so it doesn't query the database on each view; if the database can't be reached, the rows are left out and the page still loads.
 
 ---
 

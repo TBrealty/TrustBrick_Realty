@@ -91,15 +91,15 @@ export function Intelligence() {
       id="intelligence"
       aria-labelledby="intelligence-title"
       data-nav="dark"
-      className="relative overflow-hidden bg-contrast py-24 text-on-contrast sm:py-32 lg:py-44"
+      className="relative overflow-hidden bg-contrast py-20 text-on-contrast sm:py-24 lg:py-28"
     >
       <div className="shell">
         <div className="grid gap-y-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-8">
-            <SectionLabel index="03" className="mb-10 text-mist">
+            <SectionLabel index="03" className="mb-8 text-mist">
               Trustbrick Intelligence
             </SectionLabel>
-            <h2 id="intelligence-title" data-reveal="lines" className="display text-[clamp(2.9rem,7vw,7.75rem)]">
+            <h2 id="intelligence-title" data-reveal="lines" className="display text-[clamp(2.5rem,5.4vw,5.75rem)]">
               <Lines lines={["Know more", <em key="e">before you decide.</em>]} />
             </h2>
           </div>
@@ -110,12 +110,12 @@ export function Intelligence() {
             </p>
             <p className="eyebrow mt-6 flex items-center gap-2.5 text-brick-bright">
               <span aria-hidden className="size-1.5 bg-current" />
-              Platform vision · In development
+              Coming soon
             </p>
           </div>
         </div>
 
-        <div className="mt-16 grid grid-cols-1 gap-10 sm:mt-24 lg:grid-cols-12 lg:gap-x-8">
+        <div className="mt-10 grid grid-cols-1 gap-10 sm:mt-14 lg:grid-cols-12 lg:gap-x-8">
           {/* Tabs */}
           <div className="flex flex-col lg:col-span-5">
             <div

@@ -38,11 +38,30 @@ export function MotionController() {
           }
         }
       },
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.05 },
+      // Start just before a block scrolls in, so nothing sits blank on screen waiting to appear.
+      { rootMargin: "0px 0px 12% 0px", threshold: 0 },
     );
     document.querySelectorAll<HTMLElement>("[data-reveal]").forEach((el) => revealObserver.observe(el));
 
-    if (reduced) return () => revealObserver.disconnect();
+    // Content that arrives after this ran (a section streamed in or re-rendered) must reveal too,
+    // or it would stay invisible.
+    const added = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (node.matches("[data-reveal]:not(.is-in)")) revealObserver.observe(node);
+          node.querySelectorAll<HTMLElement>("[data-reveal]:not(.is-in)").forEach((el) => revealObserver.observe(el));
+        }
+      }
+    });
+    added.observe(document.body, { childList: true, subtree: true });
+
+    if (reduced) {
+      return () => {
+        revealObserver.disconnect();
+        added.disconnect();
+      };
+    }
 
     const layers: Layer[] = Array.from(document.querySelectorAll<HTMLElement>("[data-parallax]")).map((el) => ({
       el,
@@ -55,7 +74,12 @@ export function MotionController() {
       last: Number.NaN,
     }));
 
-    if (!layers.length) return () => revealObserver.disconnect();
+    if (!layers.length) {
+      return () => {
+        revealObserver.disconnect();
+        added.disconnect();
+      };
+    }
 
     let viewport = window.innerHeight;
 
@@ -128,6 +152,7 @@ export function MotionController() {
 
     return () => {
       revealObserver.disconnect();
+      added.disconnect();
       layerObserver.disconnect();
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", remeasure);

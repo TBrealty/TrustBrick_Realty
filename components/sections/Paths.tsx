@@ -2,9 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Arrow } from "@/components/buttons/ButtonLink";
-import { INTENT_EVENT, type Intent } from "@/components/hero/IntentSelector";
 import { SectionLabel } from "@/components/typography/SectionLabel";
 import { Lines } from "@/components/typography/Lines";
 import { images } from "@/lib/images";
@@ -12,7 +11,6 @@ import { images } from "@/lib/images";
 const paths = [
   {
     id: "home",
-    intents: ["buy", "rent", "pg_men", "pg_women"],
     title: "Find a home",
     line: "Buy or rent with better information.",
     audience: "Homebuyers · Renters",
@@ -22,7 +20,6 @@ const paths = [
   },
   {
     id: "stay",
-    intents: ["stay"],
     title: "Home Stay or host",
     line: "Homes by the night, from checked hosts.",
     audience: "Travellers · Hosts",
@@ -32,7 +29,6 @@ const paths = [
   },
   {
     id: "sell",
-    intents: ["sell"],
     title: "Sell property",
     line: "Reach serious buyers and simplify the journey.",
     audience: "Owners · Sellers",
@@ -43,7 +39,6 @@ const paths = [
   },
   {
     id: "business",
-    intents: [],
     title: "Build your business",
     line: "Power for agents, brokers and developers.",
     audience: "Agents · Brokers · Developers",
@@ -53,7 +48,6 @@ const paths = [
   },
   {
     id: "invest",
-    intents: ["invest"],
     title: "Invest smarter",
     line: "Better data for better real-estate decisions.",
     audience: "Investors",
@@ -66,35 +60,25 @@ const paths = [
 export function Paths() {
   const [active, setActive] = useState(0);
 
-  useEffect(() => {
-    const onIntent = (event: Event) => {
-      const intent = (event as CustomEvent<Intent>).detail;
-      const index = paths.findIndex((p) => (p.intents as readonly string[]).includes(intent));
-      if (index >= 0) setActive(index);
-    };
-    window.addEventListener(INTENT_EVENT, onIntent);
-    return () => window.removeEventListener(INTENT_EVENT, onIntent);
-  }, []);
-
   return (
-    <section id="paths" aria-labelledby="paths-title" className="relative bg-paper py-24 text-ink sm:py-32 lg:py-44">
+    <section id="paths" aria-labelledby="paths-title" className="relative bg-paper py-20 text-ink sm:py-24 lg:py-28">
       <div className="shell">
         <div className="grid gap-y-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-7">
-            <SectionLabel index="02" className="mb-10 text-stone-deep">
+            <SectionLabel index="02" className="mb-8 text-stone-deep">
               Five paths
             </SectionLabel>
-            <h2 id="paths-title" data-reveal="lines" className="display text-[clamp(2.75rem,6.2vw,6.75rem)]">
+            <h2 id="paths-title" data-reveal="lines" className="display text-[clamp(2.5rem,5vw,5.25rem)]">
               <Lines lines={["Wherever you stand,", <em key="e">there&rsquo;s a way through.</em>]} />
             </h2>
           </div>
           <p data-reveal className="max-w-[40ch] text-[1.0625rem] leading-relaxed text-stone-deep lg:col-span-4 lg:col-start-9 lg:pb-3">
-            Moving in, staying a while, moving on, building a business or building wealth. Trustbrick is being designed around each
+            Moving in, staying a while, moving on, building a business or building wealth. Trustbrick is built around each
             of these journeys, with one standard of information underneath all of them.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-x-8 sm:mt-24 lg:grid-cols-12">
+        <div className="mt-10 grid gap-x-8 sm:mt-14 lg:grid-cols-12">
           <ul className="border-t border-line-light lg:col-span-7">
             {paths.map((path, i) => {
               const isActive = i === active;
@@ -105,7 +89,7 @@ export function Paths() {
                     onPointerEnter={() => setActive(i)}
                     onFocus={() => setActive(i)}
                     aria-describedby={`path-${path.id}-line`}
-                    className="group block py-8 sm:py-10 lg:py-9"
+                    className="group block py-6 sm:py-7 lg:py-6"
                   >
                     {/* Mobile & tablet carry their own image */}
                     <div className="relative mb-6 aspect-4/3 overflow-hidden bg-sand sm:aspect-16/9 lg:hidden">
@@ -115,7 +99,7 @@ export function Paths() {
                     <div className="grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-x-3 sm:grid-cols-[3.5rem_1fr_auto]">
                       <span className="eyebrow tabular-nums text-stone-deep">0{i + 1}</span>
                       <h3
-                        className={`display text-[clamp(2.4rem,5.4vw,5.5rem)] leading-[0.95] transition-[color,transform] duration-500 ease-(--ease-smooth) ${
+                        className={`display text-[clamp(2rem,3.8vw,3.75rem)] leading-[0.95] transition-[color,transform] duration-500 ease-(--ease-smooth) ${
                           isActive ? "text-ink lg:translate-x-3" : "text-ink lg:text-[color-mix(in_oklab,var(--ink)_42%,var(--paper))]"
                         }`}
                       >
@@ -159,7 +143,7 @@ export function Paths() {
           {/* Desktop stage: one frame, one photograph per path */}
           <div className="hidden lg:col-span-5 lg:block">
             <div className="sticky top-28">
-              <div data-reveal="image" className="relative aspect-4/5 overflow-hidden bg-contrast">
+              <div data-reveal="image" className="relative aspect-4/3 overflow-hidden bg-contrast">
                 {paths.map((path, i) => (
                   <Image
                     key={path.id}

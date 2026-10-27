@@ -417,10 +417,10 @@
 /* ── Scroll reveals (activated by MotionController) ─────────────────────── */
 .js [data-reveal] {
   opacity: 0;
-  transform: translate3d(0, 26px, 0);
+  transform: translate3d(0, 18px, 0);
   transition:
-    opacity 0.8s var(--ease-smooth),
-    transform 0.95s var(--ease-smooth);
+    opacity 0.5s var(--ease-smooth),
+    transform 0.65s var(--ease-smooth);
   transition-delay: var(--d, 0ms);
 }
 .js [data-reveal="fade"] {
@@ -433,18 +433,18 @@
 .js [data-reveal="lines"] .line-mask > span {
   animation: none;
   transform: translate3d(0, 108%, 0);
-  transition: transform 1.05s var(--ease-smooth);
+  transition: transform 0.8s var(--ease-smooth);
   transition-delay: var(--d, 0ms);
 }
 .js [data-reveal="image"] {
   opacity: 1;
   transform: none;
-  clip-path: inset(12% 0 0 0);
-  transition: clip-path 1.2s var(--ease-smooth);
+  clip-path: inset(8% 0 0 0);
+  transition: clip-path 0.9s var(--ease-smooth);
 }
 .js [data-reveal="image"] img {
-  transform: scale(1.12);
-  transition: transform 1.6s var(--ease-smooth);
+  transform: scale(1.08);
+  transition: transform 1.2s var(--ease-smooth);
 }
 .js [data-reveal].is-in {
   opacity: 1;
@@ -559,56 +559,6 @@
   background-size: 100% 1px;
 }
 
-/* ── Ecosystem: brick bond with light travelling through the mortar ────── */
-@keyframes mortar-sweep {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(322%, 0, 0);
-  }
-}
-.mortar {
-  background-color: color-mix(in oklab, var(--ink) 11%, var(--ivory));
-}
-/* Sits above the mortar colour and below the bricks, so it shows only in the joints.
-   Transform-only, so it never repaints while it travels. */
-.mortar-light {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -45%;
-  width: 45%;
-  pointer-events: none;
-  background-image: radial-gradient(
-    50% 60% at 50% 50%,
-    var(--brick-bright),
-    color-mix(in oklab, var(--brick-bright) 35%, transparent) 45%,
-    transparent 75%
-  );
-  will-change: transform;
-  animation: mortar-sweep 8s var(--ease-in-out) infinite alternate;
-}
-
-/* ── Future: route line ─────────────────────────────────────────────────── */
-.route-fill {
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 2.4s var(--ease-out) 0.2s;
-}
-.is-in .route-fill {
-  transform: scaleX(1);
-}
-@media (max-width: 1023px) {
-  .route-fill {
-    transform: scaleY(0);
-    transform-origin: top;
-  }
-  .is-in .route-fill {
-    transform: scaleY(1);
-  }
-}
-
 /* Neighborhood mock: slow radar ring */
 @keyframes ring-pulse {
   0% {
@@ -683,7 +633,6 @@
   .js:not(.hero-ready) .enter-rule {
     animation-play-state: running !important;
   }
-  .mortar-light,
   .ring-pulse,
   .scroll-cue {
     animation: none !important;
@@ -693,7 +642,7 @@
   }
 }
 
-/* ── Hero: PG dropdown ──────────────────────────────────────────────────── */
+/* ── Dropdown entrance ──────────────────────────────────────────────────── */
 @keyframes menu-in {
   from {
     opacity: 0;
@@ -704,10 +653,6 @@
     transform: none;
   }
 }
-.pg-menu {
-  animation: menu-in 0.22s var(--ease-smooth) both;
-}
-
 /* ── Standalone pages: a light entrance that is not tied to the hero gate ── */
 .page-in {
   animation: fade-rise 0.7s var(--ease-smooth) both;
