@@ -96,7 +96,7 @@ export function Intelligence() {
       <div className="shell">
         <div className="grid gap-y-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-8">
-            <SectionLabel index="03" className="mb-8 text-mist">
+            <SectionLabel index="05" className="mb-8 text-mist">
               Trustbrick Intelligence
             </SectionLabel>
             <h2 id="intelligence-title" data-reveal="lines" className="display text-[clamp(2.5rem,5.4vw,5.75rem)]">

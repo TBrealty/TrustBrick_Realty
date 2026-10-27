@@ -57,10 +57,12 @@ light bands alternate down the page.
 | — | **Navigation** | Minimal header that turns solid after scrolling and steps aside while you read, returning as soon as you scroll up. It tints itself to the section beneath (dark over the cinematic sections, ivory over the light ones), shows **Log in / Sign up**, or once logged in a **user menu** (icon and first name) with Profile, Bookmarks and Log out, and has an animated full-screen menu on mobile. |
 | — | **Hero** | Full-viewport city skyline at dusk with the headline *"Real estate, built on trust."* and a **search**: Buy / Rent / PG / Stay / Invest tabs, a location (any, or one city), and a free-text box, sent to that kind's browse page. Shortcut links below (homes with 3D tours, ready to move, PGs for women, homestays, new launches), and a link for agents to join. |
 | 01 | **Explore** | Five ways in (Buy, Rent, PG, Stay, Invest), then rows of real listings: *Walk through in 3D*, *Fresh on Trustbrick* and *Homestays*. A row shows only once it has listings (`lib/listings/home.ts`, cached for a minute and shared by all visitors). |
-| — | **Plans** | Trustbrick Plus for people, and Pro & Business for agents and hosts, with free trials. |
-| 02 | **Five paths** | Find a home (→ /buy) · Home Stay or host (→ /stays) · Sell property (→ /contact, topic preset) · Build your business (→ /become-an-agent) · Invest smarter (→ /invest). On desktop, hovering a path changes the photograph beside the list. |
-| 03 | **Trustbrick Intelligence** | *"Know more before you decide."* Tabbed previews of Trustbrick Score™, Property Passport™, Trustbrick Value™ and Neighborhood Intelligence, marked *Coming soon*. |
-| 04 | **Where we're going** | The idea, who Trustbrick is for, and the road from Discovery to Finance with what's live, coming soon and later, ending with *"Your next property decision starts here."* (Search homes, Become an agent). |
+| 02 | **Virtual tours** | A real 360° room to walk around, right on the page: a poster until someone presses *Start the 360° tour*, so the viewer only loads then. Below it, Trustbrick Plus (every tour, free trial). The room is a sample photo, labelled as such. |
+| 03 | **How we check** | Three steps, each matching a check in the product: approved agents and hosts, every listing reviewed before it goes live, and reports and tour changes reviewed once live. Links to Legal Verification. |
+| — | **For agents, brokers and hosts** | Free to start, one workspace, tours that sell; Become an agent, Host your home, and a link for owners selling their own home. |
+| 04 | **Five paths** | Find a home (→ /buy) · Home Stay or host (→ /stays) · Sell property (→ /contact, topic preset) · Build your business (→ /become-an-agent) · Invest smarter (→ /invest). On desktop, hovering a path changes the photograph beside the list. |
+| 05 | **Trustbrick Intelligence** | *"Know more before you decide."* Tabbed previews of Trustbrick Score™, Property Passport™, Trustbrick Value™ and Neighborhood Intelligence, marked *Coming soon*. |
+| 06 | **Where we're going** | The idea, who Trustbrick is for, and the road from Discovery to Finance with what's live, coming soon and later, ending with *"Your next property decision starts here."* (Search homes, Become an agent). |
 | — | **Footer** | Company name, navigation, legal links and copyright. |
 
 ---
@@ -998,8 +1000,9 @@ The build needs internet access so that `next/font` can fetch the Google Fonts.
 
 ## Photo credits
 
-All photographs are from Unsplash under the [Unsplash License](https://unsplash.com/license). Attribution is not
-required and is given here as a courtesy.
+The photographs are from Unsplash under the [Unsplash License](https://unsplash.com/license), and the sample 360°
+room from Poly Haven under [CC0](https://polyhaven.com/license). Neither requires attribution; it is given here as a
+courtesy.
 
 | File | Photographer | Source |
 | --- | --- | --- |
@@ -1011,6 +1014,7 @@ required and is given here as a courtesy.
 | `architecture/city-aerial-dusk.jpg` | Priyansh Patidar | unsplash.com/photos/XVyrHtQdNlk |
 | `properties/home-sunlit-interior.jpg` | Danilo Rios | unsplash.com/photos/AgK_XAqSbfk |
 | `properties/residence-dusk.jpg` | islam allam | unsplash.com/photos/BIoLZTSra78 |
+| `tour/glasshouse-360.jpg`, `tour/glasshouse-poster.jpg` (resized, poster cropped) | Poly Haven, "Glasshouse Interior" | polyhaven.com/a/glasshouse_interior |
 
 ---
 

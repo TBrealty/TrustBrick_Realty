@@ -65,7 +65,7 @@ export function Paths() {
       <div className="shell">
         <div className="grid gap-y-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-7">
-            <SectionLabel index="02" className="mb-8 text-stone-deep">
+            <SectionLabel index="04" className="mb-8 text-stone-deep">
               Five paths
             </SectionLabel>
             <h2 id="paths-title" data-reveal="lines" className="display text-[clamp(2.5rem,5vw,5.25rem)]">
