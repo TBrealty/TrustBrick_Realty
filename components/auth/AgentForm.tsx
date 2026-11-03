@@ -188,7 +188,16 @@ export function AgentForm({
         <p className="text-[0.8125rem] leading-relaxed text-stone-deep">
           {withAccount
             ? "We'll email you a link to confirm your address. Your application goes to our team as soon as you confirm, and we'll email you when it's decided."
-            : "A Trustbrick admin reviews every application. We'll email you when it's decided."}
+            : "A Trustbrick admin reviews every application. We'll email you when it's decided."}{" "}
+          By applying you agree to the{" "}
+          <a href="/terms" className="link-rule text-ink">
+            Terms of Use
+          </a>
+          , including the section for agents and hosts, and the{" "}
+          <a href="/privacy" className="link-rule text-ink">
+            Privacy Policy
+          </a>
+          .
         </p>
       </div>
     </form>

@@ -34,6 +34,17 @@ export function HostApplicationForm({ cities }: { cities: { id: string; name: st
       </div>
       <div className="sm:col-span-2">
         <Submit>Send application</Submit>
+        <p className="mt-3 text-[0.8125rem] leading-relaxed text-stone-deep">
+          By applying you agree to the{" "}
+          <a href="/terms" className="link-rule text-ink">
+            Terms of Use
+          </a>
+          , including the section for agents and hosts, and the{" "}
+          <a href="/privacy" className="link-rule text-ink">
+            Privacy Policy
+          </a>
+          .
+        </p>
       </div>
     </ActionForm>
   );

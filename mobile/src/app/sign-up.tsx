@@ -1,8 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import { KeyboardAvoidingView, Linking, Platform } from "react-native";
 import { ApiError, api } from "@/api/client";
+import { API_ORIGIN } from "@/config";
 import { Body, Button, Field, Notice, Scroll, Title } from "@/components/ui";
 import { PASSWORD_MIN } from "@/lib/auth/form";
 import { useColors } from "@/theme";
@@ -34,7 +35,15 @@ export default function SignUp() {
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" hint={`At least ${PASSWORD_MIN} characters.`} error={errors.password} />
         <Button label="Create account" loading={create.isPending} disabled={!name || !email || !password} onPress={() => create.mutate()} />
         <Body tone="muted" style={{ fontSize: 13 }}>
-          By creating an account you agree to Trustbrick&apos;s terms and privacy policy.
+          By creating an account you agree to Trustbrick&apos;s{" "}
+          <Body tone="brick" style={{ fontSize: 13 }} accessibilityRole="link" onPress={() => Linking.openURL(`${API_ORIGIN}/terms`)}>
+            Terms of Use
+          </Body>{" "}
+          and{" "}
+          <Body tone="brick" style={{ fontSize: 13 }} accessibilityRole="link" onPress={() => Linking.openURL(`${API_ORIGIN}/privacy`)}>
+            Privacy Policy
+          </Body>
+          .
         </Body>
       </Scroll>
     </KeyboardAvoidingView>

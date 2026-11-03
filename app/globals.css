@@ -880,3 +880,29 @@
     }
   }
 }
+
+/* ── Legal pages (components/legal/LegalDocument.tsx) ───────────────────── */
+.legal-body > * + * {
+  margin-top: 0.9em;
+}
+.legal-body ul {
+  list-style: disc;
+  padding-left: 1.25em;
+}
+.legal-body ul > li + li {
+  margin-top: 0.35em;
+}
+.legal-body h3 {
+  margin-top: 1.4em;
+  font-weight: 600;
+  color: var(--ink);
+}
+.legal-body strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.legal-body a {
+  color: var(--brick);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -13,7 +13,7 @@ export const site = {
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
 } as const;
 
-// Contact and legal destinations are placeholders until those pages exist.
+// Where the site's shared links go.
 export const links = {
   getStarted: "#get-started",
   login: "/login",
@@ -25,8 +25,8 @@ export const links = {
   messages: "/account/messages",
   about: "/about",
   contact: "/contact",
-  privacy: "#privacy",
-  terms: "#terms",
+  privacy: "/privacy",
+  terms: "/terms",
 } as const;
 
 export const footerNav = [

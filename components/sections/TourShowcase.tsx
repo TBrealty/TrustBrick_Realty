@@ -20,7 +20,7 @@ const DEMO: TourData = {
   link: null,
 };
 
-const PLUS = ["Every 360° tour and 3D view on Trustbrick", "AI locality insights for any property", "Price-drop alerts on homes you've saved"];
+const PLUS = ["Every 360° tour and 3D view on Trustbrick", "AI locality insights (coming soon)", "Price-drop alerts on saved homes (coming soon)"];
 
 /**
  * A real 360° room to walk around, right on the landing page, and the plan that opens every tour.

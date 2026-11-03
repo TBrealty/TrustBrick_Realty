@@ -34,7 +34,15 @@ export function SignUpForm() {
       <IntentField defaultValue={state.values?.intent} error={errors.intent} />
       <SubmitButton pendingLabel="Creating your account…">Create account</SubmitButton>
       <p className="text-[0.8125rem] leading-relaxed text-stone-deep">
-        We&rsquo;ll send a link to confirm your email before your account is active.
+        We&rsquo;ll send a link to confirm your email before your account is active. By creating an account you agree to the{" "}
+        <a href="/terms" className="link-rule text-ink">
+          Terms of Use
+        </a>{" "}
+        and{" "}
+        <a href="/privacy" className="link-rule text-ink">
+          Privacy Policy
+        </a>
+        .
       </p>
     </form>
   );
