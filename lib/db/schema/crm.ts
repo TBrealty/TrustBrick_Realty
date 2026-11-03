@@ -97,7 +97,7 @@ export const leadActivities = crm.table(
   },
   (t) => [
     index("lead_activities_lead_created_idx").on(t.leadId, t.createdAt.desc()),
-    check("lead_activities_type_check", sql`"activity_type" IN ('created', 'status_changed', 'note', 'visit_requested', 'visit_updated')`),
+    check("lead_activities_type_check", sql`"activity_type" IN ('created', 'status_changed', 'note', 'visit_requested', 'visit_updated', 'assigned')`),
   ],
 );
 

@@ -106,14 +106,14 @@ describe("admin-created agents", () => {
   it("an independent agent gets their own organization; a broker admin needs one", async () => {
     const { token } = await invite(admin, details());
     await acceptAgentInvitation(token, { sessionUserId: null, password: "a very long password", ipKey: "ai3" }, ctx);
-    expect(await code(inviteAgent(admin, details({ role: "broker_admin" }), ctx))).toBe("VALIDATION_ERROR");
+    expect(await code(inviteAgent(admin, details({ role: "owner" }), ctx))).toBe("VALIDATION_ERROR");
 
     const org = await makeOrg("Broker Co");
-    const broker = await invite(admin, details({ organizationReference: org.referenceId, role: "broker_admin" }));
+    const broker = await invite(admin, details({ organizationReference: org.referenceId, role: "owner" }));
     await acceptAgentInvitation(broker.token, { sessionUserId: null, password: "a very long password", ipKey: "ai4" }, ctx);
     const brokerRow = await one<{ user_id: string }>(sql`SELECT accepted_user_id AS user_id FROM orgs.agent_invitations WHERE reference_id = ${broker.referenceId}`);
     const actor = await actorFor(brokerRow.user_id);
-    expect(actor.roles).toEqual(["broker_admin"]);
+    expect(actor.roles).toEqual(["owner"]);
     expect(actor.permissions["listings.view"]).toBe("org");
   });
 

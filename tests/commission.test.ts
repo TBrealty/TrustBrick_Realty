@@ -55,7 +55,7 @@ beforeAll(async () => {
   admin = await (await makeAdmin(ADMIN_PRESETS.operations.permissions)).actor();
   moderator = await (await makeAdmin(ADMIN_PRESETS.moderation.permissions)).actor();
   brokerage = await makeOrg("Commission Realty");
-  brokerAdmin = await (await makeAgent(brokerage.id, "Broker Admin", "broker_admin")).actor();
+  brokerAdmin = await (await makeAgent(brokerage.id, "Broker Admin", "owner")).actor();
   agent = await (await makeAgent(brokerage.id, "Commission Agent")).actor();
 });
 
@@ -80,7 +80,7 @@ describe("rates and accepting them", () => {
 
   it("blocks submitting listings until the rates are accepted", async () => {
     const org = await makeOrg("Unaccepted Realty");
-    const solo = await (await makeAgent(org.id, "Unaccepted Agent", "broker_admin", { accept: false })).actor();
+    const solo = await (await makeAgent(org.id, "Unaccepted Agent", "owner", { accept: false })).actor();
     const ref = await readyRentListing(solo);
     expect(await code(transitionListing(solo, ref, "submit", {}, ctx))).toBe("VALIDATION_ERROR");
     await acceptCommissionTerms(solo, ctx);

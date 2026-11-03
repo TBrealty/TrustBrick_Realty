@@ -37,10 +37,10 @@ export default async function LoginPage({ searchParams }: Props) {
           <FormAlert tone="success">Your password has been changed. Log in with your new password.</FormAlert>
         </div>
       )}
-      {(params.invited === "1" || params.invited === "agent") && (
+      {(params.invited === "1" || params.invited === "agent" || params.invited === "member") && (
         <div className="mb-6">
           <FormAlert tone="success">
-            Your {params.invited === "agent" ? "agent" : "administrator"} account is ready. Log in with the password you just chose.
+            Your {params.invited === "agent" ? "agent " : params.invited === "member" ? "" : "administrator "}account is ready. Log in with the password you just chose.
           </FormAlert>
         </div>
       )}

@@ -89,7 +89,7 @@ describe("View cards", () => {
 
   it("agents can't open cards, and a broker admin sees only their own organization's agents", async () => {
     expect(await code(loadSummary(agent, "user", customer.referenceId))).toBe("FORBIDDEN");
-    const broker = await (await makeAgent(org.id, "Summary Broker", "broker_admin")).actor();
+    const broker = await (await makeAgent(org.id, "Summary Broker", "owner")).actor();
     expect((await loadSummary(broker, "agent", agentRef)).kind).toBe("agent");
     expect(await code(loadSummary(broker, "agent", otherOrgAgentRef))).toBe("NOT_FOUND");
     expect(await code(loadSummary(broker, "organization", org.referenceId))).toBe("FORBIDDEN");

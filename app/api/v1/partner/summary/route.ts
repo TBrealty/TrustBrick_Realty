@@ -4,6 +4,7 @@ import { listLeads, listVisits } from "@/lib/services/crm";
 import { listingGroupCounts } from "@/lib/services/listings/queries";
 import { listBookingsForActor } from "@/lib/services/stays/bookings";
 import { listHostConversations } from "@/lib/services/stays/messages";
+import { canViewMembers } from "@/lib/services/members";
 import { hosts } from "@/lib/workspace/nav";
 
 /**
@@ -34,7 +35,8 @@ export const GET = apiRoute("v1.partner.summary", { auth: "user" }, async ({ act
       onboard: can(a, "listings.create"),
       performance: can(a, "analytics.view"),
       clients: can(a, "contacts.view"),
-      team: can(a, "agents.view", "org"),
+      /** The Team screen: Owners and Managers manage people; a Supervisor sees their team. */
+      team: canViewMembers(a),
       commission: can(a, "commission.view"),
       subscription: professional,
       /** Agents get the hosting calendar once they have a homestay; hosts always. */

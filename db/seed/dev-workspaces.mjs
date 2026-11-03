@@ -191,8 +191,8 @@ try {
   agent.applicant = await agentProfile(id.applicant, { phone: "+919800000106", rera: "SAMPLE-RERA-AGT-0106", citySlug: "hyderabad", years: 3, status: "pending", verification: "pending", requestedOrg: org.skyline.id });
 
   const m = {};
-  m.broker = await membership(id.broker, org.skyline.id, ["broker_admin"]);
-  m.teamLead = await membership(id.teamLead, org.skyline.id, ["team_lead"]);
+  m.broker = await membership(id.broker, org.skyline.id, ["owner"]);
+  m.teamLead = await membership(id.teamLead, org.skyline.id, ["supervisor"]);
   m.agent = await membership(id.agent, org.skyline.id, ["agent"]);
   m.independent = await membership(id.independent, org.kabir.id, ["agent"]);
   m.suspendedAgent = await membership(id.suspendedAgent, org.harbour.id, ["agent"]);
@@ -591,8 +591,8 @@ try {
         superadmin: `SuperAdmin ${staff.superadmin.reference_id}`,
         opsAdmin: `Admin (operations) ${staff.opsAdmin.reference_id}`,
         moderator: `Admin (moderation) ${staff.moderator.reference_id}`,
-        broker: `Broker admin, Sample Skyline Realty ${agent.broker.reference_id}`,
-        teamLead: `Team lead, Sample Skyline Realty ${agent.teamLead.reference_id}`,
+        broker: `Owner, Sample Skyline Realty ${agent.broker.reference_id}`,
+        teamLead: `Supervisor, Sample Skyline Realty ${agent.teamLead.reference_id}`,
         agent: `Agent, Sample Skyline Realty ${agent.agent.reference_id}`,
         independent: `Independent agent ${agent.independent.reference_id}`,
         suspendedAgent: `Suspended agent ${agent.suspended.reference_id}`,

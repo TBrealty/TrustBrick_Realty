@@ -3,7 +3,7 @@
 import { acceptInvitationAction } from "@/app/invite/[token]/actions";
 import { ActionForm, Submit, TextInput } from "./forms";
 
-export function AcceptInvitationForm({ token, kind, newAccount, defaultName }: { token: string; kind: "admin" | "agent"; newAccount: boolean; defaultName: string }) {
+export function AcceptInvitationForm({ token, kind, newAccount, defaultName }: { token: string; kind: "admin" | "agent" | "member"; newAccount: boolean; defaultName: string }) {
   return (
     <ActionForm action={acceptInvitationAction} className="mt-6 space-y-4">
       <input type="hidden" name="token" value={token} />

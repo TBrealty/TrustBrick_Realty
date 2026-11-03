@@ -59,7 +59,7 @@ beforeAll(async () => {
   moderator = await (await makeAdmin(ADMIN_PRESETS.moderation.permissions)).actor();
   const org = await makeOrg("Workspace Realty");
   orgId = org.id;
-  broker = await (await makeAgent(org.id, "Workspace Broker", "broker_admin", { accept: false })).actor();
+  broker = await (await makeAgent(org.id, "Workspace Broker", "owner", { accept: false })).actor();
   brokerToken = await tokenFor(broker.userId);
 });
 

@@ -25,7 +25,7 @@ export function InviteAgentForm({ cities, organizationReference }: { cities: { i
         defaultValue="agent"
         options={[
           { value: "agent", label: "Agent: their own listings and leads" },
-          { value: "broker_admin", label: "Broker admin: everything in the organization" },
+          { value: "owner", label: "Owner: runs the organization and adds its people" },
         ]}
       />
       <div className="sm:col-span-2">

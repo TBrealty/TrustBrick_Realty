@@ -10,7 +10,8 @@ import { requirePermission } from "@/lib/authz/session";
 import { AppError } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_TRANSITIONS, VISIT_STATUS_LABELS, getLead } from "@/lib/services/crm";
-import { leadNoteAction, leadStatusAction } from "../actions";
+import { leadAssignees } from "@/lib/services/members";
+import { leadAssignAction, leadNoteAction, leadStatusAction } from "../actions";
 
 type Props = { params: Promise<{ ref: string }> };
 
@@ -24,6 +25,7 @@ const ACTIVITY: Record<string, string> = {
   note: "Note",
   visit_requested: "Visit requested",
   visit_updated: "Visit updated",
+  assigned: "Assigned",
 };
 
 export default async function LeadPage({ params }: Props) {
@@ -36,6 +38,7 @@ export default async function LeadPage({ params }: Props) {
   const canManage = can(actor, "leads.manage") && actor.workspace === "professional";
   const canVisits = can(actor, "visits.manage") && actor.workspace === "professional";
   const next = LEAD_TRANSITIONS[lead.status];
+  const assignees = actor.workspace === "professional" ? await leadAssignees(actor) : [];
 
   return (
     <>
@@ -133,6 +136,21 @@ export default async function LeadPage({ params }: Props) {
                 <TextInput label="If lost, why?" name="lostReason" hint="Required when marking a lead lost." />
                 <TextArea label="Note (optional)" name="note" rows={2} />
                 <Submit>Update stage</Submit>
+              </ActionForm>
+            </Card>
+          )}
+          {assignees.length > 0 && (
+            <Card title="Assign" description={actor.permissions["leads.assign"] === "team" ? "Give this lead to someone in your team." : "Give this lead to someone in your organization."}>
+              <ActionForm action={leadAssignAction} className="space-y-3">
+                <input type="hidden" name="ref" value={ref} />
+                <Select
+                  label="Agent"
+                  name="agent"
+                  required
+                  placeholder="Choose"
+                  options={assignees.map((a) => ({ value: a.userReferenceId, label: `${a.name}${a.isYou ? " (you)" : ""} · ${a.roleName}` }))}
+                />
+                <Submit variant="secondary">Assign lead</Submit>
               </ActionForm>
             </Card>
           )}

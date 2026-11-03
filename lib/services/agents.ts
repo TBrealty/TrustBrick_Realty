@@ -14,7 +14,7 @@ import { env } from "@/lib/env";
 import { AppError, conflict, invalid, notFound } from "@/lib/errors";
 import { fieldErrorsFrom } from "@/lib/listings/onboarding-schema";
 import { gstinProblem, normalizeGstin } from "@/lib/organizations/gstin";
-import { APPLICANT_ORG_TYPES, type ApplicantOrgType } from "@/lib/organizations/terms";
+import { APPLICANT_ORG_TYPES } from "@/lib/organizations/terms";
 import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { type PersonActor, type RequestContext, audit } from "./audit";
 import { HOLD_REASONS, pauseListings, resumeListings } from "./listings/lifecycle";
@@ -49,12 +49,8 @@ const optionalText = (max: number) => z.preprocess(blank, z.string().trim().max(
 
 export type AgentApplicationType = (typeof AGENT_APPLICATION_TYPES)[number];
 
-/** A registered organization's applicant becomes its admin, in the role that fits its kind. */
-const OWNER_ROLES = { brokerage: "broker_admin", developer: "developer_admin", property_manager: "property_manager", pg_operator: "property_manager" } as const satisfies Record<
-  ApplicantOrgType,
-  RoleCode
->;
-type MembershipRole = "agent" | (typeof OWNER_ROLES)[ApplicantOrgType];
+/** An agent joins as an Agent; whoever registered the organization becomes its Owner. */
+type MembershipRole = Extract<RoleCode, "agent" | "owner">;
 
 export const applicationSchema = z.object({
   phone,
@@ -290,7 +286,7 @@ export type AgentRow = {
   plan: { name: string; status: string } | null;
 };
 
-/** Broker admins see their own organization's agents (org scope); platform staff see everyone. */
+/** Owners and Managers see their own organization's agents (org scope); platform staff see everyone. */
 function agentScope(actor: Actor): SQL {
   const scope = assertCan(actor, "agents.view", "org");
   if (scope === "platform") return sql`TRUE`;
@@ -585,7 +581,7 @@ export async function approveAgent(actor: Actor, referenceId: string, options: {
       await audit(tx, actor, { event: "ORGANIZATION_APPROVED", target: { type: "organization", id: registered.id, referenceId: registered.referenceId }, organizationId: registered.id, before: { status: "pending" }, after: { status: "active", verificationStatus: verification }, metadata: { agentApplication: agent.referenceId } }, ctx);
     }
     const organizationId = registered
-      ? await createAgentMembership(tx, actor.userId, agent, registered.id, OWNER_ROLES[registered.type as ApplicantOrgType] ?? "broker_admin")
+      ? await createAgentMembership(tx, actor.userId, agent, registered.id, "owner")
       : await agentMembership(tx, actor, agent);
     await tx.execute(sql`
       UPDATE orgs.agent_profiles SET status = 'active', verification_status = ${verification}, status_reason = NULL,

@@ -94,7 +94,7 @@ describe("actor resolution and permissions", () => {
     const org = await makeOrg();
     const agent = await makeAgent(org.id);
     const other = await makeOrg("Second Brokerage");
-    await addMembership(agent.user.id, other.id, ["broker_admin"]);
+    await addMembership(agent.user.id, other.id, ["owner"]);
     expect((await loadWorkspaces(agent.user.id)).length).toBe(2);
   });
 });

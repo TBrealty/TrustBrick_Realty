@@ -5,7 +5,7 @@ import { useSession } from "@/auth/session";
 import { Body, Card, Scroll, Small } from "@/components/ui";
 import { useColors } from "@/theme";
 
-const ROLE_LABELS: Record<string, string> = { broker_admin: "Broker admin", team_lead: "Team lead", agent: "Agent", host: "Host" };
+const ROLE_LABELS: Record<string, string> = { owner: "Owner", manager: "Manager", supervisor: "Supervisor", agent: "Agent", operator: "Operator", host: "Host" };
 
 /** For someone in more than one organization: which one partner mode works in. */
 export default function Workspaces() {

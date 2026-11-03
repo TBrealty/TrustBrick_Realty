@@ -26,6 +26,10 @@ export const PERMISSIONS = {
   "users.suspend": { domain: "users", description: "Suspend and reinstate user accounts", platform: true },
 
   "agents.view": { domain: "agents", description: "View agents and their activity", platform: false },
+
+  "members.view": { domain: "members", description: "See the organization's people, their roles and teams", platform: false },
+  "members.manage": { domain: "members", description: "Invite people, change their roles, remove them and arrange teams", platform: false },
+  "billing.manage": { domain: "billing", description: "Choose the organization's plan and accept commission terms", platform: false },
   "agents.create": { domain: "agents", description: "Create agents and send their invitations", platform: true },
   "agents.manage": { domain: "agents", description: "Edit permitted agent profile fields", platform: true },
   "agents.verify": { domain: "agents", description: "Approve, reject and verify agent applications", platform: true },
@@ -62,6 +66,7 @@ export const PERMISSIONS = {
 
   "leads.view": { domain: "leads", description: "View leads", platform: false },
   "leads.manage": { domain: "leads", description: "Update lead status and add notes", platform: false },
+  "leads.assign": { domain: "leads", description: "Give a lead to another agent", platform: false },
   "visits.view": { domain: "visits", description: "View visits", platform: false },
   "visits.manage": { domain: "visits", description: "Schedule, complete and cancel visits", platform: false },
   "contacts.view": { domain: "contacts", description: "View contacts", platform: false },
@@ -95,6 +100,9 @@ export const isPermission = (value: unknown): value is Permission => typeof valu
 /** Never grantable to an admin: these belong to the SuperAdmin role alone. */
 export const SUPERADMIN_ONLY: readonly Permission[] = ["admins.view", "admins.create", "admins.manage", "settings.manage"];
 
+/** About running one organization from the inside: never granted to platform staff. */
+export const ORG_ONLY: readonly Permission[] = ["members.view", "members.manage", "billing.manage", "leads.assign"];
+
 /** Private content the SuperAdmin doesn't see by default: an admin is granted it for a reason. */
 const PRIVATE_CONTENT: readonly Permission[] = ["contacts.view", "conversations.view"];
 
@@ -105,13 +113,13 @@ const PRIVATE_CONTENT: readonly Permission[] = ["contacts.view", "conversations.
  * and editing records are admin work, so they appear here only as grantable to admins.
  */
 export const SUPERADMIN_GRANTS: readonly Permission[] = [
-  ...ALL_PERMISSIONS.filter((p) => p.endsWith(".view") && !PRIVATE_CONTENT.includes(p) && !SUPERADMIN_ONLY.includes(p)),
+  ...ALL_PERMISSIONS.filter((p) => p.endsWith(".view") && !PRIVATE_CONTENT.includes(p) && !SUPERADMIN_ONLY.includes(p) && !ORG_ONLY.includes(p)),
   ...SUPERADMIN_ONLY,
 ];
 
 /** What a SuperAdmin may grant an admin, always at platform scope. */
 export const ADMIN_GRANTABLE: readonly Permission[] = ALL_PERMISSIONS.filter(
-  (p) => !SUPERADMIN_ONLY.includes(p) && !["listings.create", "listings.edit", "listings.submit", "contacts.view"].includes(p),
+  (p) => !SUPERADMIN_ONLY.includes(p) && !ORG_ONLY.includes(p) && !["listings.create", "listings.edit", "listings.submit", "contacts.view"].includes(p),
 );
 
 export const ADMIN_PRESETS = {
@@ -213,6 +221,25 @@ export const ROLES = {
     workspace: "platform",
     grants: { "dashboard.view": "platform" },
   },
+  owner: {
+    name: "Owner",
+    description: "Runs the organization: every listing, lead and visit, its people, its plan and its commission terms.",
+    workspace: "professional",
+    grants: professional("org", { "agents.view": "org", "members.view": "org", "members.manage": "org", "leads.assign": "org", "billing.manage": "org" }),
+  },
+  manager: {
+    name: "Manager",
+    description: "Runs the organization day to day: every listing, lead and visit, the teams, and the people below Manager.",
+    workspace: "professional",
+    grants: professional("org", { "agents.view": "org", "members.view": "org", "members.manage": "org", "leads.assign": "org" }),
+  },
+  supervisor: {
+    name: "Supervisor",
+    description: "An agent who also sees and works their team's listings, leads and visits, and assigns the team's leads.",
+    workspace: "professional",
+    requiresAgentProfile: true,
+    grants: professional("team", { "members.view": "team", "leads.assign": "team" }),
+  },
   agent: {
     name: "Agent",
     description: "Onboards properties and works their own listings, leads and visits.",
@@ -220,31 +247,18 @@ export const ROLES = {
     requiresAgentProfile: true,
     grants: professional("own"),
   },
-  team_lead: {
-    name: "Team lead",
-    description: "An agent who also sees their team's listings, leads and visits.",
+  operator: {
+    name: "Operator",
+    description: "Prepares the organization's listings: creates, edits, uploads and submits them. No leads or clients.",
     workspace: "professional",
-    requiresAgentProfile: true,
-    grants: professional("team"),
-  },
-  broker_admin: {
-    name: "Broker admin",
-    description: "Runs a brokerage: sees every listing, lead and agent in the organization.",
-    workspace: "professional",
-    requiresAgentProfile: true,
-    grants: professional("org", { "agents.view": "org" }),
-  },
-  developer_admin: {
-    name: "Developer admin",
-    description: "Manages a developer's projects and listings.",
-    workspace: "professional",
-    grants: professional("org"),
-  },
-  property_manager: {
-    name: "Property manager",
-    description: "Manages listings, leads and visits for the properties the organization runs.",
-    workspace: "professional",
-    grants: professional("org"),
+    grants: {
+      "dashboard.view": "org",
+      "properties.view": "org",
+      "listings.view": "org",
+      "listings.create": "org",
+      "listings.edit": "org",
+      "listings.submit": "org",
+    },
   },
   landlord: {
     name: "Landlord",
@@ -290,6 +304,19 @@ export const AGENT_ROLE_CODES: readonly RoleCode[] = (Object.keys(ROLES) as Role
   (code) => (ROLES[code] as RoleDef).requiresAgentProfile,
 );
 export const HOST_ROLE_CODES: readonly RoleCode[] = (Object.keys(ROLES) as RoleCode[]).filter((code) => (ROLES[code] as RoleDef).requiresHostProfile);
+
+/**
+ * The roles inside an organization, most senior first. Owners manage everyone; Managers manage
+ * the people below Manager; only Owners make someone a Manager or an Owner.
+ */
+export const ORG_ROLES = ["owner", "manager", "supervisor", "agent", "operator"] as const satisfies readonly RoleCode[];
+export type OrgRole = (typeof ORG_ROLES)[number];
+export const isOrgRole = (value: unknown): value is OrgRole => ORG_ROLES.includes(value as OrgRole);
+export const ORG_ROLE_RANK: Record<OrgRole, number> = { owner: 4, manager: 3, supervisor: 2, agent: 1, operator: 1 };
+/** Roles that hold leads, visits and listings as the agent customers deal with. */
+export const LEAD_HOLDING_ROLES: readonly OrgRole[] = ["owner", "manager", "supervisor", "agent"];
+/** Roles that work as agents in front of customers, and so need an agent profile. */
+export const AGENT_ORG_ROLES: readonly OrgRole[] = ["supervisor", "agent"];
 
 const ALL_PURPOSES = ["sale", "rent", "lease", "pg", "stay"] as const;
 export type ListingPurpose = (typeof ALL_PURPOSES)[number];

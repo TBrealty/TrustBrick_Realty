@@ -107,6 +107,11 @@ export default function TermsPage() {
                 <li>you own, or have permission to use, the photos, videos, tours and documents you upload;</li>
                 <li>you handle the personal data of people who contact you only to respond to them and to complete their transaction, and in line with the law;</li>
                 <li>
+                  <strong>Your organization&rsquo;s people:</strong> the people your organization adds to its workspace join without a separate
+                  review by Trustbrick. Your organization vouches for them, gives them only the access their work needs, removes them when they
+                  leave, and is responsible for what they do on Trustbrick in its name;
+                </li>
+                <li>
                   <strong>Commission:</strong> before your listings can be submitted, your organization accepts Trustbrick&rsquo;s commission
                   rates shown in your workspace. Commission, plus GST, is charged on deals you close through Trustbrick and on homestay
                   bookings when a guest checks in, as those rates set out. It is payable as Trustbrick asks, quoting each charge&rsquo;s

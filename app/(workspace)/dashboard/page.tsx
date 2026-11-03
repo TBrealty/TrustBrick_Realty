@@ -391,12 +391,14 @@ async function ProfessionalView({ actor, range }: { actor: Actor; range: ReturnT
   const scope = actor.permissions["listings.view"];
   const whose = scope === "org" ? "your organization's" : scope === "team" ? "your team's" : "your";
   const p = range.previous.label;
+  // Operators prepare listings: they have no leads or visits to show.
+  const leads = can(actor, "leads.view");
 
   return (
     <>
       <PageHeader
         title={`Welcome back, ${actor.name.split(" ")[0]}`}
-        description={`Figures cover ${whose} properties, leads and visits only.`}
+        description={leads ? `Figures cover ${whose} properties, leads and visits only.` : `Figures cover ${whose} properties only.`}
         actions={
           can(actor, "listings.create") ? (
             <Link href="/properties/new" className="wbtn wbtn-primary">
@@ -429,9 +431,13 @@ async function ProfessionalView({ actor, range }: { actor: Actor; range: ReturnT
         <StatCard label="Pending approval" value={d.listings.pending} href="/properties?group=pending" />
         <StatCard label="Drafts" value={d.listings.drafts} href="/properties?group=drafts" hint={`${d.listings.addedThisMonth} added this month`} />
         <StatCard label="Changes requested or rejected" value={d.listings.changesRequested + d.listings.rejected} href="/properties?group=drafts" />
-        <StatCard label="New leads" value={d.leads.newInPeriod.current} change={{ ...d.leads.newInPeriod, periodLabel: p }} href="/leads?status=new" />
-        <StatCard label="Open leads" value={d.leads.open} href="/leads?open=1" hint={`${d.leads.convertedInPeriod} converted in this range`} />
-        <StatCard label="Upcoming visits" value={d.visits.upcoming} href="/visits?upcoming=1" hint={`${d.visits.requested} requests waiting · ${d.visits.completedInPeriod} completed`} />
+        {leads && (
+          <>
+            <StatCard label="New leads" value={d.leads.newInPeriod.current} change={{ ...d.leads.newInPeriod, periodLabel: p }} href="/leads?status=new" />
+            <StatCard label="Open leads" value={d.leads.open} href="/leads?open=1" hint={`${d.leads.convertedInPeriod} converted in this range`} />
+            <StatCard label="Upcoming visits" value={d.visits.upcoming} href="/visits?upcoming=1" hint={`${d.visits.requested} requests waiting · ${d.visits.completedInPeriod} completed`} />
+          </>
+        )}
         <StatCard label="Listing views" value={d.engagement.views.current} change={{ ...d.engagement.views, periodLabel: p }} hint={`${d.engagement.uniqueViewers} unique viewers · ${d.engagement.saves} saves`} />
       </div>
 
@@ -454,31 +460,43 @@ async function ProfessionalView({ actor, range }: { actor: Actor; range: ReturnT
             <p className="text-[0.8125rem] text-stone-deep">Choose a range of at least a few days to see views by day.</p>
           )}
         </Card>
-        <Card title="New leads">
-          <TrendChart title="New leads" points={d.series.leads} unit={range.bucket} valueLabel="new leads" />
-        </Card>
+        {leads ? (
+          <Card title="New leads">
+            <TrendChart title="New leads" points={d.series.leads} unit={range.bucket} valueLabel="new leads" />
+          </Card>
+        ) : (
+          <TopListings d={d} range={range} leads={false} />
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="Lead pipeline" description="All leads, by stage">
-          <BarList
-            rows={LEAD_ORDER.map((s) => ({ label: LEAD_STATUS_LABELS[s], value: d.leads.byStatus.find((b) => b.status === s)?.count ?? 0 }))}
-          />
-        </Card>
-        <Card title="Top live listings" description={range.label} padded={false}>
-          <DataTable
-            caption="Live listings with the most views"
-            rows={d.topListings}
-            rowKey={(r) => r.referenceId}
-            empty={<p className="p-5 text-[0.8125rem] text-stone-deep">No live listings yet.</p>}
-            columns={[
-              { header: "Listing", cell: (r) => <Link href={`/properties/${r.referenceId}`} className="hover:underline">{r.title}</Link> },
-              { header: "Views", cell: (r) => r.views, align: "right" },
-              { header: "Leads", cell: (r) => r.leads, align: "right" },
-            ]}
-          />
-        </Card>
-      </div>
+      {leads && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card title="Lead pipeline" description="All leads, by stage">
+            <BarList
+              rows={LEAD_ORDER.map((s) => ({ label: LEAD_STATUS_LABELS[s], value: d.leads.byStatus.find((b) => b.status === s)?.count ?? 0 }))}
+            />
+          </Card>
+          <TopListings d={d} range={range} leads />
+        </div>
+      )}
     </>
+  );
+}
+
+function TopListings({ d, range, leads }: { d: Awaited<ReturnType<typeof professionalDashboard>>; range: ReturnType<typeof resolveRange>; leads: boolean }) {
+  return (
+    <Card title="Top live listings" description={range.label} padded={false}>
+      <DataTable
+        caption="Live listings with the most views"
+        rows={d.topListings}
+        rowKey={(r) => r.referenceId}
+        empty={<p className="p-5 text-[0.8125rem] text-stone-deep">No live listings yet.</p>}
+        columns={[
+          { header: "Listing", cell: (r) => <Link href={`/properties/${r.referenceId}`} className="hover:underline">{r.title}</Link> },
+          { header: "Views", cell: (r) => r.views, align: "right" },
+          ...(leads ? [{ header: "Leads", cell: (r: (typeof d.topListings)[number]) => r.leads, align: "right" as const }] : []),
+        ]}
+      />
+    </Card>
   );
 }

@@ -28,7 +28,7 @@ type Row = Record<string, unknown>;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 const optional = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" || v === null ? undefined : v), schema.optional());
 
-export const ROLE_LABELS: Record<(typeof INVITED_AGENT_ROLES)[number], string> = { agent: "Agent", broker_admin: "Broker admin" };
+export const ROLE_LABELS: Record<(typeof INVITED_AGENT_ROLES)[number], string> = { agent: "Agent", owner: "Owner" };
 
 export const agentInviteSchema = z
   .object({
@@ -47,7 +47,7 @@ export const agentInviteSchema = z
   })
   .refine((v) => v.role === "agent" || v.organizationReference, {
     path: ["organizationReference"],
-    message: "A broker admin runs an organization. Enter its reference.",
+    message: "An Owner runs an organization. Enter its reference.",
   });
 
 export async function inviteAgent(actor: Actor, raw: unknown, ctx: RequestContext): Promise<{ referenceId: string }> {
@@ -251,7 +251,7 @@ export async function acceptAgentInvitation(token: string, input: AcceptInput, c
       invitedBy,
       { userId: account.userId, name: String((nameRow.rows[0] as Row).name), referenceId: agentReferenceId },
       (inv.organization_id as string) ?? null,
-      inv.role_code as "agent" | "broker_admin",
+      inv.role_code as "agent" | "owner",
     );
     await tx.execute(sql`
       UPDATE orgs.agent_invitations SET status = 'accepted', accepted_at = now(), accepted_user_id = ${account.userId}, updated_at = now()

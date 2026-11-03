@@ -308,7 +308,7 @@ export async function platformDashboard(actor: Actor, range: DateRange, options:
   };
 }
 
-// ── Professional (agent, team lead, broker admin) ────────────────────────────
+// ── Professional (agents, supervisors, owners…) ────────────────────────────
 
 export type ProfessionalDashboard = {
   listings: { total: number; live: number; pending: number; drafts: number; changesRequested: number; rejected: number; archived: number; addedThisMonth: number };
@@ -324,8 +324,9 @@ export async function professionalDashboard(actor: Actor, range: DateRange): Pro
   assertCan(actor, "dashboard.view");
   const { from, to, previous } = range;
   const scoped = listingScope(actor, "listings.view");
-  const leadsScoped = leadScope(actor, "leads.view");
-  const visitsScoped = visitScope(actor, "visits.view");
+  // Operators prepare listings and have no leads or visits: theirs count as none.
+  const leadsScoped = can(actor, "leads.view") ? leadScope(actor, "leads.view") : sql`FALSE`;
+  const visitsScoped = can(actor, "visits.view") ? visitScope(actor, "visits.view") : sql`FALSE`;
   const monthStart = new Date(`${istDate(new Date()).slice(0, 7)}-01T00:00:00+05:30`);
   const fromDay = istDate(from);
   const toDay = istDate(to);

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { ApiError, api } from "@/api/client";
 import type { LeadDetail } from "@/api/types";
+import type { LeadAssignee } from "@/api/workspace-types";
 import { VisitCard } from "@/partner/visit-card";
 import { Badge, Body, Button, Card, Chip, Display, Divider, ErrorState, Eyebrow, Field, Loading, Notice, Scroll, Small, Title } from "@/components/ui";
 import { LEAD_STATUS_LABELS, LEAD_TRANSITIONS, type LeadStatus } from "@/lib/crm/terms";
@@ -21,6 +22,17 @@ export default function LeadScreen() {
   const [target, setTarget] = useState<LeadStatus | null>(null);
   const [lostReason, setLostReason] = useState("");
   const [note, setNote] = useState("");
+  // Supervisors, Managers and Owners can give a lead to someone else; for everyone else this is empty.
+  const assignees = useQuery({ queryKey: ["partner-lead-assignees", ref], queryFn: () => api<{ assignees: LeadAssignee[] }>(`/partner/leads/${ref}/assign`) });
+  const assign = useMutation({
+    mutationFn: (agent: string) => api<LeadDetail | null>(`/partner/leads/${ref}/assign`, { method: "POST", body: { agent } }),
+    onSuccess: (data) => {
+      refresh();
+      // Given to someone outside what this person sees: it leaves their list.
+      if (data) queryClient.setQueryData(["partner-lead", ref], data);
+      else router.back();
+    },
+  });
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["partner-lead", ref] });
     void queryClient.invalidateQueries({ queryKey: ["partner-leads"] });
@@ -88,6 +100,24 @@ export default function LeadScreen() {
             </>
           )}
           {move.isError && !moveError?.fieldErrors && <Notice>{(move.error as Error).message}</Notice>}
+        </Card>
+      )}
+
+      {(assignees.data?.assignees.length ?? 0) > 0 && (
+        <Card>
+          <Title>Assign to</Title>
+          <Small>Now with {l.agentName ?? "nobody"}.</Small>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {assignees.data!.assignees.map((a) => (
+              <Chip
+                key={a.userReferenceId}
+                label={`${a.name}${a.isYou ? " (you)" : ""}`}
+                selected={assign.isPending && assign.variables === a.userReferenceId}
+                onPress={() => assign.mutate(a.userReferenceId)}
+              />
+            ))}
+          </View>
+          {assign.isError && <Notice>{(assign.error as Error).message}</Notice>}
         </Card>
       )}
 

@@ -99,8 +99,10 @@ export default function RootLayout() {
             <Stack.Screen name="partner/visits" options={{ title: "Visits" }} />
             <Stack.Screen name="partner/clients" options={{ title: "Clients" }} />
             <Stack.Screen name="partner/calendar" options={{ title: "Calendar" }} />
-            <Stack.Screen name="partner/team/index" options={{ title: "Agents" }} />
-            <Stack.Screen name="partner/team/[ref]" options={{ title: "Agent" }} />
+            <Stack.Screen name="partner/team/index" options={{ title: "People" }} />
+            <Stack.Screen name="partner/team/[ref]" options={{ title: "" }} />
+            <Stack.Screen name="partner/team/invite" options={{ title: "Add someone", presentation: "modal" }} />
+            <Stack.Screen name="partner/team/teams/[id]" options={{ title: "Team" }} />
             <Stack.Screen name="partner/commission" options={{ title: "Commission" }} />
             <Stack.Screen name="partner/subscription" options={{ title: "Subscription" }} />
             <Stack.Screen name="partner/performance" options={{ title: "Performance" }} />

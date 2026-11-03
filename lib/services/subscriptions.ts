@@ -194,7 +194,7 @@ export function partnerSubject(actor: Actor): Subject | null {
   return { kind: "organization", organizationId: actor.organization.id };
 }
 export function canManagePartnerSubscription(actor: Actor): boolean {
-  return actor.workspace === "professional" && (actor.organization.orgType === "personal" || actor.permissions["listings.view"] === "org");
+  return actor.workspace === "professional" && (actor.organization.orgType === "personal" || can(actor, "billing.manage", "org"));
 }
 
 type Who = { userId: string; audit: Actor | PersonActor };

@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { ORG_ROLES } from "../../authz/catalog";
 import { citext, deletedAt, id, referenceId, timestamps } from "./columns";
 import { places } from "./geography";
 import { users } from "./identity";
@@ -187,7 +188,7 @@ export const membershipPermissions = orgs.table(
   ],
 );
 
-/** Teams make `scope = team` meaningful: a team lead sees their team members' work. */
+/** Teams make `scope = team` meaningful: a supervisor sees their team members' work. */
 export const teams = orgs.table(
   "teams",
   {
@@ -337,8 +338,8 @@ export const adminInvitations = orgs.table(
   ],
 );
 
-/** Roles an admin can give an agent they create. Team leads need a team, which has no screens yet. */
-export const INVITED_AGENT_ROLES = ["agent", "broker_admin"] as const;
+/** Roles an admin can give an agent they create: an agent, or the Owner of the organization they join. */
+export const INVITED_AGENT_ROLES = ["agent", "owner"] as const;
 
 /**
  * An admin creating an agent (docs/portals/README.md §6). The details are held here until
@@ -378,8 +379,53 @@ export const agentInvitations = orgs.table(
     index("agent_invitations_status_created_idx").on(t.status, t.createdAt),
     check("agent_invitations_status_check", inList("status", INVITATION_STATUSES)),
     check("agent_invitations_role_check", inList("role_code", INVITED_AGENT_ROLES)),
-    check("agent_invitations_broker_needs_org_check", sql`"role_code" = 'agent' OR "organization_id" IS NOT NULL`),
+    check("agent_invitations_owner_needs_org_check", sql`"role_code" = 'agent' OR "organization_id" IS NOT NULL`),
     check("agent_invitations_phone_check", sql`"phone" ~ '^[+]?[0-9]{10,15}$'`),
     check("agent_invitations_experience_check", sql`"experience_years" IS NULL OR "experience_years" BETWEEN 0 AND 70`),
+  ],
+);
+
+/**
+ * An organization's Owner or Manager adding someone (docs/portals/README.md §6). The organization
+ * vouches for its people, so there is no Trustbrick review: when the person accepts, their
+ * account (if new), their membership in the role given here and, for agents and supervisors, an
+ * active agent profile with this phone number all appear together.
+ */
+export const memberInvitations = orgs.table(
+  "member_invitations",
+  {
+    id: id(),
+    referenceId: referenceId("INV"),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: citext("email").notNull(),
+    name: text("name").notNull(),
+    roleCode: text("role_code").notNull(),
+    /** Agents and supervisors only: customers who enquire see it. */
+    phone: text("phone"),
+    reraAgentNumber: text("rera_agent_number"),
+    /** A team to join on acceptance (agents and supervisors). */
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
+    /** SHA-256 of the token. The token itself exists only in the emailed link. */
+    tokenHash: text("token_hash").notNull().unique(),
+    status: text("status").notNull().default("pending"),
+    invitedBy: uuid("invited_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedUserId: uuid("accepted_user_id").references(() => users.id, { onDelete: "set null" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("member_invitations_one_pending_idx").on(t.organizationId, t.email).where(sql`"status" = 'pending'`),
+    index("member_invitations_org_status_idx").on(t.organizationId, t.status, t.createdAt),
+    check("member_invitations_status_check", inList("status", INVITATION_STATUSES)),
+    check("member_invitations_role_check", inList("role_code", ORG_ROLES)),
+    check("member_invitations_agent_phone_check", sql`"role_code" NOT IN ('supervisor', 'agent') OR "phone" IS NOT NULL`),
+    check("member_invitations_phone_check", sql`"phone" IS NULL OR "phone" ~ '^[+]?[0-9]{10,15}$'`),
   ],
 );

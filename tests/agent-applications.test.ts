@@ -98,7 +98,7 @@ describe("applying through a new organization", () => {
     expect(org).toMatchObject({ status: "active", verification_status: "verified" });
     const actor = await actorFor(applicant.id);
     expect(actor.organization.id).toBe(org.id);
-    expect(actor.roles).toEqual(["broker_admin"]);
+    expect(actor.roles).toEqual(["owner"]);
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: applicant.email, subject: expect.stringMatching(/approved/) });
@@ -110,7 +110,7 @@ describe("applying through a new organization", () => {
     const applicant = await makeUser("Dev Owner");
     const { referenceId } = await applyAsAgent(person(applicant), organization({ orgType: "developer" }), ctx);
     await approveAgent(admin, referenceId, { verify: false }, ctx);
-    expect((await actorFor(applicant.id)).roles).toEqual(["developer_admin"]);
+    expect((await actorFor(applicant.id)).roles).toEqual(["owner"]);
   });
 
   it("on rejection: the organization is rejected with it, the email gives the reason, and reapplying reuses it", async () => {

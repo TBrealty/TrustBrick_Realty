@@ -92,7 +92,7 @@ const SECTIONS: SectionDef[] = [
   },
   {
     label: "Team",
-    items: [{ label: "Agents", href: "/agents", icon: "badge", permission: "agents.view", atLeast: "org", workspace: "professional" }],
+    items: [{ label: (a) => (a.permissions["members.view"] === "team" ? "My team" : "People"), href: "/team", icon: "users", permission: "members.view", atLeast: "team", workspace: "professional" }],
   },
   {
     label: "Insights",

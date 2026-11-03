@@ -104,7 +104,7 @@ export default function PrivacyPage() {
               <ul>
                 <li><strong>Everyone visiting Trustbrick</strong> sees published listings: their details, photos and approximate location, and the name of the agent, organization or host. A homestay&rsquo;s exact address is shown only to a guest whose booking is confirmed.</li>
                 <li><strong>The agent, organization or host you contact</strong> receives your enquiry or booking, including your name, phone number, email and message. A host sees a guest&rsquo;s phone number once the booking is confirmed.</li>
-                <li><strong>Within an organization,</strong> its managers can see the listings, leads and visits of the agents they are responsible for.</li>
+                <li><strong>Within an organization,</strong> its Owners and Managers can see the listings, leads and visits of everyone in it, and a Supervisor those of their team. Its Owners and Managers also see the name, email and phone number of each person in the organization.</li>
                 <li><strong>Independent advocates</strong> receive the documents and details of a Legal Verification request you make, and use them only for that request.</li>
                 <li><strong>Trustbrick&rsquo;s team</strong> sees what it needs to review applications and listings, handle reports, and support you.</li>
                 <li>

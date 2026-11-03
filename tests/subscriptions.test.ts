@@ -136,7 +136,7 @@ describe("a partner's subscription", () => {
 
   beforeAll(async () => {
     org = await makeOrg("Plans Realty");
-    brokerAdmin = await (await makeAgent(org.id, "Plans Broker", "broker_admin")).actor();
+    brokerAdmin = await (await makeAgent(org.id, "Plans Broker", "owner")).actor();
     agent = await (await makeAgent(org.id, "Plans Agent")).actor();
   });
 
@@ -275,7 +275,7 @@ describe("on the Agents list", () => {
 
     // A broker admin sees their agents but not their subscriptions.
     const brokerage = await makeOrg("Plan-blind Brokerage");
-    const broker = await (await makeAgent(brokerage.id, "Plan-blind Broker", "broker_admin")).actor();
+    const broker = await (await makeAgent(brokerage.id, "Plan-blind Broker", "owner")).actor();
     const mine = await makeAgent(brokerage.id, "Plan-blind Agent");
     expect((await agentSummary(broker, mine.referenceId)).subscriptions).toBeNull();
     expect((await listAgents(broker, { sort: "newest" }, 1)).rows.every((r) => r.plan === null)).toBe(true);

@@ -270,25 +270,64 @@ export type PartnerSubscription = {
   canManage: boolean;
 };
 
-export type AgentRow = {
-  referenceId: string;
+/** Roles inside an organization, most senior first. */
+export type OrgRole = "owner" | "manager" | "supervisor" | "agent" | "operator";
+
+export type MemberRow = {
+  membershipId: string;
   userReferenceId: string;
   name: string;
   email: string;
-  phone: string;
-  organization: string | null;
-  status: string;
-  verificationStatus: string;
+  phone: string | null;
+  role: OrgRole | null;
+  roleName: string;
+  agentReferenceId: string | null;
+  agentStatus: string | null;
+  teams: { id: string; name: string }[];
   listings: number;
-  leads: number;
-  createdAt: string;
+  openLeads: number;
+  upcomingVisits: number;
+  joinedAt: string;
   lastActiveAt: string | null;
+  isYou: boolean;
 };
-export type AgentDetail = AgentRow & {
-  reraAgentNumber: string | null;
-  experienceYears: number | null;
-  bio: string | null;
-  city: string | null;
-  counts: { visits: number; activeListings: number; pendingListings: number };
-  recentListings: { referenceId: string; title: string; status: string; updatedAt: string }[];
+
+export type MemberDetail = MemberRow & {
+  manage: { roles: OrgRole[]; canChangeRole: boolean; canRemove: boolean };
+  handoverTo: { userReferenceId: string; name: string; roleName: string }[];
+  openBookings: number;
 };
+
+export type TeamRow = {
+  id: string;
+  name: string;
+  members: { userReferenceId: string; name: string; role: OrgRole | null; roleName: string; isLead: boolean }[];
+  listings: number;
+  openLeads: number;
+};
+
+export type MemberInvitationRow = {
+  referenceId: string;
+  name: string;
+  email: string;
+  role: OrgRole;
+  roleName: string;
+  team: string | null;
+  status: string;
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+  canRevoke: boolean;
+};
+
+export type MembersResponse = {
+  organization: string;
+  members: MemberRow[];
+  teams: TeamRow[];
+  invitations: MemberInvitationRow[];
+  /** Set for Owners and Managers: the roles they may give. */
+  manage: { roles: OrgRole[] } | null;
+  roles: { code: OrgRole; name: string; description: string; agent: boolean }[];
+};
+
+export type LeadAssignee = { userReferenceId: string; name: string; roleName: string; isYou: boolean };

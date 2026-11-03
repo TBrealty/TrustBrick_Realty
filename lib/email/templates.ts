@@ -108,6 +108,48 @@ export function agentInvitationMessage(to: string, inviterName: string, organiza
   };
 }
 
+/** Someone in an organization adding a person to it, in a role. */
+export function memberInvitationMessage(
+  to: string,
+  input: { inviterName: string; organization: string; role: string; url: string; expiresHours: number },
+): EmailMessage {
+  const role = /^[AEIOU]/.test(input.role) ? `an ${input.role}` : `a ${input.role}`;
+  const lines = [
+    `${input.inviterName} added you to ${input.organization} on ${brand}, as ${role}.`,
+    `Accept to open ${input.organization}'s workspace. If you're new to ${brand}, you'll choose a password; if you already have an account, log in with this email.`,
+    `The link expires in ${input.expiresHours} hours and works once. If you weren't expecting this, you can ignore this email.`,
+  ];
+  return {
+    to,
+    subject: `Join ${input.organization} on ${brand}`,
+    text: `${lines.join("\n\n")}\n\nAccept here: ${input.url}`,
+    html: layout(`Join ${escape(input.organization)}`, lines.map(escape), { label: "Accept invitation", url: input.url }),
+  };
+}
+
+/** Someone's role in an organization changed, or they were removed from it. */
+export function membershipChangedMessage(
+  to: string,
+  input: { name: string; organization: string; changedBy: string } & ({ kind: "role"; role: string; url: string } | { kind: "removed"; handedTo: string | null }),
+): EmailMessage {
+  const first = input.name.split(" ")[0] || "there";
+  const lines =
+    input.kind === "role"
+      ? [`${input.changedBy} changed your role at ${input.organization} to ${input.role}.`, "What you can see and do in its workspace has changed to match."]
+      : [
+          `${input.changedBy} removed you from ${input.organization} on ${brand}. You no longer have access to its workspace.`,
+          input.handedTo ? `Your listings, leads and upcoming visits there are now with ${input.handedTo}.` : "",
+          "Your own Trustbrick account is unaffected. If you think this is a mistake, contact the organization.",
+        ].filter(Boolean);
+  const subject = input.kind === "role" ? `Your role at ${input.organization} changed` : `You've been removed from ${input.organization}`;
+  return {
+    to,
+    subject,
+    text: `Hi ${first},\n\n${lines.join("\n\n")}${input.kind === "role" ? `\n\n${input.url}` : ""}`,
+    html: layout(escape(subject), lines.map(escape), input.kind === "role" ? { label: "Open the workspace", url: input.url } : undefined),
+  };
+}
+
 /** Booking emails: one layout, the wording varies by event. Values are escaped here. */
 export function bookingMessage(to: string, input: { subject: string; heading: string; lines: string[]; action?: { label: string; url: string } }): EmailMessage {
   return {
@@ -124,8 +166,8 @@ export function agentApprovedMessage(to: string, input: { name: string; organiza
   const org = input.organization;
   const lines = org?.isNew
     ? [
-        `${org.name} is now live on ${brand}, and you're its admin. Your workspace is ready: onboard properties, and handle your leads and visits.`,
-        `Agents who work with you can join by applying as an agent and choosing "Join an organization" with your reference, ${org.referenceId}.`,
+        `${org.name} is now live on ${brand}, and you're its Owner. Your workspace is ready: onboard properties, and handle your leads and visits.`,
+        `Add the people who work with you from Team in your workspace, as Managers, Supervisors, Agents or Operators. Each gets an email to set up their account. Your organization's reference is ${org.referenceId}.`,
       ]
     : [
         `Your agent workspace is ready${org ? ` with ${org.name}` : ""}. Onboard properties, and handle your leads and visits from one place.`,

@@ -3,6 +3,7 @@
 import { runAction, text } from "@/lib/actions";
 import type { ActionResult } from "@/lib/errors";
 import { addLeadNote, updateLeadStatus, updateVisit } from "@/lib/services/crm";
+import { assignLead } from "@/lib/services/members";
 
 type Result = ActionResult<unknown>;
 
@@ -20,6 +21,12 @@ export async function leadNoteAction(_p: Result | null, form: FormData): Promise
   const ref = text(form, "ref");
   const r = await runAction("lead.note", (a) => addLeadNote(a, ref, text(form, "note")), { revalidate: [`/leads/${ref}`] });
   return r.ok ? { ok: true, message: "Note added." } : r;
+}
+
+export async function leadAssignAction(_p: Result | null, form: FormData): Promise<Result> {
+  const ref = text(form, "ref");
+  const r = await runAction("lead.assign", (a, ctx) => assignLead(a, ref, text(form, "agent"), ctx), { revalidate: [`/leads/${ref}`, "/leads", "/dashboard"] });
+  return r.ok ? { ok: true, message: "Lead assigned. They've been notified." } : r;
 }
 
 export async function visitAction(_p: Result | null, form: FormData): Promise<Result> {

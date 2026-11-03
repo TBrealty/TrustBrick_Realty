@@ -33,7 +33,7 @@ export default function More() {
         s?.can.clients && { icon: "person-outline", label: "Clients", detail: "Everyone who's enquired", href: "/partner/clients" },
         s?.can.calendar && { icon: "calendar-number-outline", label: "Calendar", detail: "Block nights, set special prices", href: "/partner/calendar" },
         inboxInMore && { icon: "chatbubbles-outline", label: "Messages", href: "/inbox", badge: s?.inbox?.unread },
-        s?.can.team && { icon: "id-card-outline", label: "Agents", detail: "Your organization's team", href: "/partner/team" },
+        s?.can.team && { icon: "people-outline", label: "Team", detail: "People, roles and teams", href: "/partner/team" },
       ],
     },
     {

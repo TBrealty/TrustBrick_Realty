@@ -198,7 +198,7 @@ export async function acceptanceFor(organizationId: string, tx: DbOrTx = db, rat
 /** Who may accept for the organization: its broker admin, or the person whose own organization it is. */
 export function canAcceptTerms(actor: Actor): boolean {
   if (actor.workspace !== "professional" || !can(actor, "commission.view")) return false;
-  return actor.organization.orgType === "personal" || actor.permissions["commission.view"] === "org";
+  return actor.organization.orgType === "personal" || can(actor, "billing.manage", "org");
 }
 
 export async function acceptCommissionTerms(actor: Actor, ctx: RequestContext) {

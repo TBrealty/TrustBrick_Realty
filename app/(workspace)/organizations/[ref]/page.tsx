@@ -107,7 +107,7 @@ export default async function OrganizationPage({ params, searchParams }: Props) 
               caption="Members of this organization"
               rows={org.memberList}
               rowKey={(m) => m.userReferenceId}
-              empty={<p className="p-5 text-[0.8125rem] text-stone-deep">No members yet. Agents join by applying and naming this organization&apos;s reference.</p>}
+              empty={<p className="p-5 text-[0.8125rem] text-stone-deep">No members yet. Its Owners and Managers add people from Team in their workspace.</p>}
               columns={[
                 {
                   header: "Person",
