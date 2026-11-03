@@ -97,8 +97,28 @@ function filterChips(kind: ListingKind, params: RawSearchParams, f: ListingFilte
   return chips;
 }
 
-export async function BrowsePage({ kind, searchParams }: { kind: ListingKind; searchParams: Promise<RawSearchParams> }) {
+type Heading = { eyebrow: string; title: string; intro: string };
+type Crumb = { label: string; href: string };
+
+/**
+ * A kind's listings with filters. City and locality landing pages (PlacePage) pass their own
+ * heading and breadcrumbs, and content to show below the results.
+ */
+export async function BrowsePage({
+  kind,
+  searchParams,
+  heading,
+  breadcrumbs,
+  children,
+}: {
+  kind: ListingKind;
+  searchParams: Promise<RawSearchParams>;
+  heading?: Heading;
+  breadcrumbs?: Crumb[];
+  children?: React.ReactNode;
+}) {
   const meta = KIND_META[kind];
+  const head = heading ?? { eyebrow: meta.eyebrow, title: meta.title, intro: meta.intro };
   const params = await searchParams;
   const filters = parseFilters(kind, params);
 
@@ -120,15 +140,35 @@ export async function BrowsePage({ kind, searchParams }: { kind: ListingKind; se
   return (
     <BrowseTransition>
       <div className="shell pt-8 pb-20 sm:pt-12 lg:pt-14">
+        {breadcrumbs && (
+          <nav aria-label="Breadcrumb" className="mb-6">
+            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem] text-stone-deep">
+              {breadcrumbs.map((c, i) => (
+                <li key={c.href} className="flex items-center gap-2">
+                  {i > 0 && <span aria-hidden>/</span>}
+                  {i === breadcrumbs.length - 1 ? (
+                    <span aria-current="page" className="text-ink">
+                      {c.label}
+                    </span>
+                  ) : (
+                    <Link href={c.href} className="hover:text-ink">
+                      {c.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5 border-b border-line-light pb-8">
           <div>
             <p className="eyebrow flex items-center gap-3 text-brick">
               <span aria-hidden className="h-px w-8 bg-current" />
-              {meta.eyebrow}
+              {head.eyebrow}
             </p>
-            <h1 className="display mt-4 text-[clamp(2.25rem,5vw,3.75rem)] leading-[0.95]">{meta.title}</h1>
-            <p className="mt-3 text-[0.9375rem] text-stone-deep">
-              {meta.intro}{" "}
+            <h1 className="display mt-4 text-[clamp(2.25rem,5vw,3.75rem)] leading-[0.95]">{head.title}</h1>
+            <p className="mt-3 max-w-[70ch] text-[0.9375rem] text-stone-deep">
+              {head.intro}{" "}
               <span className="text-ink">
                 {result.total} {kind === "stay" ? (result.total === 1 ? "home stay" : "home stays") : result.total === 1 ? "property" : "properties"}
                 {kind === "stay" && filters.checkIn && filters.checkOut ? " free for your dates" : ""}
@@ -222,6 +262,7 @@ export async function BrowsePage({ kind, searchParams }: { kind: ListingKind; se
             </PendingResults>
           </section>
         </div>
+        {children}
       </div>
     </BrowseTransition>
   );

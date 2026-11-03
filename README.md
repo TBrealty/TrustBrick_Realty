@@ -378,8 +378,19 @@ Each of these is covered by an automated end-to-end test run against the real da
 
 ## Browsing properties
 
-The hero's **"I'm looking to…"** options open these pages. **Sell is not wired up yet** — sellers will register as
-sellers before they can list, and that flow is still being planned.
+The landing page's search opens these pages. **Sell is not wired up yet** — sellers will register as sellers before
+they can list, and that flow is still being planned.
+
+**City and locality pages.** Every kind has a page per city and per locality, for people who search for "flats for
+rent in Kondapur": `/buy/hyderabad`, `/rent/hyderabad/kondapur`, `/pg/pune`, `/stays/north_goa/calangute`,
+`/invest/mumbai` (the addresses use the places' slugs from the reference data).
+- Each is that kind's search narrowed to the place. It has its own title, description and canonical address, a
+  sentence on what's listed there and at what prices, breadcrumbs (also as structured data), links to the city's
+  localities with their counts, and links to the place's other kinds (`lib/listings/places.ts`,
+  `components/listings/PlacePage.tsx`).
+- A place with nothing listed yet is marked `noindex`, so search engines don't show empty pages. Unknown places are 404s.
+- The sitemap lists every place page that has listings, and `/cities` (linked from the footer) lists every city.
+- Choosing only a city in the landing page's search opens its page.
 
 | Route | Shows | Filters |
 | --- | --- | --- |

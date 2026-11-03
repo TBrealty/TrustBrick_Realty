@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 /**
@@ -25,6 +26,7 @@ const SHORTCUTS = [
 ];
 
 export function HeroSearch({ locations }: { locations: { slug: string; name: string }[] }) {
+  const router = useRouter();
   const [kind, setKind] = useState<(typeof KINDS)[number]["id"]>("buy");
   const current = KINDS.find((k) => k.id === kind)!;
 
@@ -36,8 +38,17 @@ export function HeroSearch({ locations }: { locations: { slug: string; name: str
         role="search"
         aria-label="Search properties"
         onSubmit={(e) => {
+          const form = e.currentTarget;
+          const city = (form.elements.namedItem("city") as HTMLSelectElement).value;
+          const q = (form.elements.namedItem("q") as HTMLInputElement).value.trim();
+          // Just a city: its landing page (/rent/hyderabad), the address people share and search for.
+          if (city && !q) {
+            e.preventDefault();
+            router.push(`${current.path}/${city}`);
+            return;
+          }
           // Leave empty fields out of the address, so a bare search lands on a clean page.
-          for (const el of Array.from(e.currentTarget.elements) as HTMLInputElement[]) if (el.name && !el.value) el.disabled = true;
+          for (const el of Array.from(form.elements) as HTMLInputElement[]) if (el.name && !el.value) el.disabled = true;
         }}
         className="rounded-[14px] bg-card p-2.5 text-ink shadow-[0_24px_60px_-24px_rgb(0_0_0/0.7)] sm:p-3"
       >

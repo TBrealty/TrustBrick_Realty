@@ -6,7 +6,7 @@ import { isReferenceId } from "@/lib/reference";
 import { publicHost } from "@/lib/services/stays/hosts";
 import { STAY_TERM_COLUMNS, type StayTermsView, stayTermsOf } from "@/lib/stays/terms";
 import { type TourSummary, parseTourLink } from "@/lib/tours/terms";
-import { type ListingFilters, type ListingKind, PLOT_TYPE_CODES } from "./filters";
+import { type ListingFilters, type ListingKind, PLOT_TYPE_CODES, parseFilters } from "./filters";
 import type { ListingSummary } from "./types";
 
 export const PAGE_SIZE = 12;
@@ -312,6 +312,48 @@ export async function searchListings(kind: ListingKind, filters: ListingFilters)
     hasMore && last ? encodeCursor(filters.sort === "newest" ? (last.publishedAt ?? "") : last.price, last.id) : null;
 
   return { items: rows, total: Number((count.rows[0] as Row).total), nextCursor };
+}
+
+// ── City and locality landing pages ───────────────────────────────────────────
+
+export type PlaceStats = {
+  total: number;
+  minPrice: number | null;
+  maxPrice: number | null;
+  /** The place's localities that have listings of this kind, busiest first. */
+  localities: { slug: string; name: string; count: number }[];
+};
+
+/** How many live listings of a kind a city (or one of its localities) has, and their price range. */
+export const placeStats = cache(async (kind: ListingKind, filters: ListingFilters): Promise<PlaceStats> => {
+  const where = sql.join(filterConditions(kind, filters), sql` AND `);
+  const { rows } = await db.execute(sql`
+    SELECT loc.slug, loc.name, count(*)::int AS n, min(l.price) AS min_price, max(l.price) AS max_price
+      FROM marketplace.listings l
+      JOIN real_estate.properties p ON p.id = l.property_id
+      ${summaryJoins}
+     WHERE ${where}
+     GROUP BY loc.slug, loc.name
+     ORDER BY n DESC, loc.name`);
+  const list = rows as Row[];
+  const prices = list.flatMap((r) => [r.min_price, r.max_price]).filter((v) => v !== null).map(Number);
+  return {
+    total: list.reduce((sum, r) => sum + Number(r.n), 0),
+    minPrice: prices.length ? Math.min(...prices) : null,
+    maxPrice: prices.length ? Math.max(...prices) : null,
+    localities: list.map((r) => ({ slug: String(r.slug), name: String(r.name), count: Number(r.n) })),
+  };
+});
+
+/** Every city and locality with at least one live listing of each kind, for the sitemap. */
+export async function placesWithListings(kind: ListingKind): Promise<{ city: string; locality: string }[]> {
+  const { rows } = await db.execute(sql`
+    SELECT DISTINCT city.slug AS city, loc.slug AS locality
+      FROM marketplace.listings l
+      JOIN real_estate.properties p ON p.id = l.property_id
+      ${summaryJoins}
+     WHERE ${sql.join(filterConditions(kind, parseFilters(kind, {})), sql` AND `)} AND city.slug IS NOT NULL`);
+  return (rows as Row[]).map((r) => ({ city: String(r.city), locality: String(r.locality) }));
 }
 
 // ── Sidebar options ───────────────────────────────────────────────────────────

@@ -35,6 +35,7 @@ export const footerNav = [
   { label: "PGs", href: "/pg" },
   { label: "Home Stay", href: "/stays" },
   { label: "Invest", href: "/invest" },
+  { label: "Browse by city", href: "/cities" },
   { label: "Legal Verification", href: "/legal-verification" },
   { label: "Plans", href: "/plans" },
   { label: "About", href: links.about },
