@@ -548,6 +548,85 @@ export const getListing = cache(async (referenceId: string): Promise<ListingDeta
   };
 });
 
+/**
+ * What Trustbrick has checked about a listing, for the "Checked by Trustbrick" panel: when our
+ * team approved it, and who stands behind it. Only facts the product records, never a score.
+ */
+export type ListingTrust = {
+  /** When a reviewer approved it (falls back to when it went live, for listings approved automatically). */
+  reviewedAt: string | null;
+  /** The agent or host customers deal with. `verified` means Trustbrick checked their identity (and RERA, for agents). */
+  person: { name: string; role: "agent" | "host"; approved: boolean; verified: boolean } | null;
+  /** The brokerage, developer or operator; null for an independent agent or host. */
+  organization: { name: string; verified: boolean } | null;
+  /** An admin marked the property itself verified (ownership documents checked or visited). */
+  propertyVerified: boolean;
+};
+
+export const listingTrust = cache(async (listingId: string): Promise<ListingTrust> => {
+  const { rows } = await db.execute(sql`
+    SELECT l.published_at,
+           (SELECT max(rc.decided_at) FROM trust.review_cases rc
+             WHERE rc.listing_id = l.id AND rc.case_type = 'listing_review' AND rc.status = 'approved') AS reviewed_at,
+           u.name AS person_name, ap.status AS agent_status, ap.verification_status AS agent_verification,
+           hp.status AS host_status, hp.verification_status AS host_verification,
+           org.name AS org_name, org.org_type, org.verification_status AS org_verification,
+           p.verification_status AS property_verification
+      FROM marketplace.listings l
+      JOIN real_estate.properties p ON p.id = l.property_id
+      JOIN orgs.organizations org ON org.id = l.organization_id
+      LEFT JOIN marketplace.listing_agents la ON la.listing_id = l.id AND la.role = 'primary' AND la.ended_at IS NULL
+      LEFT JOIN identity.users u ON u.id = la.agent_user_id
+      LEFT JOIN orgs.agent_profiles ap ON ap.user_id = u.id
+      LEFT JOIN stays.host_profiles hp ON hp.user_id = u.id
+     WHERE l.id = ${listingId}`);
+  const r = rows[0] as Row | undefined;
+  if (!r) return { reviewedAt: null, person: null, organization: null, propertyVerified: false };
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
+  const isHost = r.host_status === "active" && r.agent_status !== "active";
+  return {
+    reviewedAt: iso(r.reviewed_at) ?? iso(r.published_at),
+    person: r.person_name
+      ? {
+          // First name only, as hosts are shown everywhere else.
+          name: isHost ? String(r.person_name).split(" ")[0] : String(r.person_name),
+          role: isHost ? "host" : "agent",
+          approved: (isHost ? r.host_status : r.agent_status) === "active",
+          verified: (isHost ? r.host_verification : r.agent_verification) === "verified",
+        }
+      : null,
+    organization: r.org_type === "personal" ? null : { name: String(r.org_name), verified: r.org_verification === "verified" },
+    propertyVerified: r.property_verification === "verified",
+  };
+});
+
+/**
+ * Other live listings of the same kind in the same city, the same locality first: where someone
+ * goes next when this one isn't quite right.
+ */
+export const similarListings = cache(async (listingId: string, kind: ListingKind, limit = 4): Promise<{ rows: ListingSummary[]; sameLocality: boolean }> => {
+  const where = sql.join(filterConditions(kind, parseFilters(kind, {})), sql` AND `);
+  const { rows } = await db.execute(sql`
+    WITH me AS (
+      SELECT a.place_id, loc.path, pt.category FROM marketplace.listings l
+        JOIN real_estate.properties p ON p.id = l.property_id
+        JOIN real_estate.property_types pt ON pt.id = p.property_type_id
+        JOIN geography.addresses a ON a.id = p.address_id
+        JOIN geography.places loc ON loc.id = a.place_id
+       WHERE l.id = ${listingId})
+    SELECT ${summaryColumns}, (a.place_id = (SELECT place_id FROM me)) AS same_locality
+      FROM marketplace.listings l
+      JOIN real_estate.properties p ON p.id = l.property_id
+      ${summaryJoins}
+     WHERE ${where} AND l.id <> ${listingId} AND city.path @> (SELECT path FROM me)
+       -- Homes next to homes, offices next to offices.
+       AND pt.category = (SELECT category FROM me)
+     ORDER BY same_locality DESC, l.published_at DESC NULLS LAST
+     LIMIT ${limit}`);
+  const list = rows as Row[];
+  return { rows: list.map(toSummary), sameLocality: list.length > 0 && list.every((r) => Boolean(r.same_locality)) };
+});
+
 // ── Bookmarks ─────────────────────────────────────────────────────────────────
 
 export async function savedPropertyIds(userId: string, propertyIds: string[]): Promise<Set<string>> {

@@ -605,6 +605,11 @@
   }
 }
 
+/* The full-screen photo viewer: the page behind it doesn't scroll. */
+html:has(dialog.photo-viewer[open]) {
+  overflow: hidden;
+}
+
 /* ── Reduced motion: keep the page calm and legible ─────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,

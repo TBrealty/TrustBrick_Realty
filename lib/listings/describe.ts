@@ -86,6 +86,57 @@ export function keyFacts(l: ListingSummary): string[] {
   return facts;
 }
 
+/**
+ * The labelled facts at the top of a listing page: what someone checks first, by kind of
+ * listing. At most four, and only the ones the listing has.
+ */
+export function keyFactTiles(
+  l: ListingSummary & { roadWidthFt?: number | null; facing?: string | null; fitoutStatus?: string | null; workstations?: number | null },
+): [string, string][] {
+  const tiles: ([string, string] | null)[] = [];
+  const available = (from: string | null) => (!from || new Date(from) <= new Date() ? "Now" : formatDate(from, { day: "numeric", month: "short" }));
+  if (l.transactionType === "stay" && l.stay) {
+    tiles.push(
+      ["Space", l.stay.spaceType === "entire_home" ? "Entire home" : "Private room"],
+      ["Guests", `Up to ${l.stay.maxGuests}`],
+      l.bedrooms ? ["Bedrooms", String(l.bedrooms)] : null,
+      ["Beds", String(l.stay.beds)],
+    );
+  } else if (l.transactionType === "pg") {
+    const order = ["single", "double", "triple", "quad"];
+    tiles.push(
+      ["For", GENDER_LABEL[l.genderPolicy ?? ""]?.replace(/^For /, "").replace(/^\w/, (c) => c.toUpperCase()) ?? "Anyone"],
+      l.occupancies.length ? ["Sharing", [...l.occupancies].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((o) => OCCUPANCY_LABEL[o]).join(", ")] : null,
+      l.meals ? ["Meals", MEALS_LABEL[l.meals]] : null,
+      l.foodPreference ? ["Food", FOOD_LABEL[l.foodPreference].replace(/ food$/, "")] : null,
+    );
+  } else if (l.category === "land") {
+    tiles.push(
+      ["Type", l.typeName],
+      l.plotAreaSqyd ? ["Plot area", `${Math.round(l.plotAreaSqyd).toLocaleString("en-IN")} sq yd`] : null,
+      l.facing ? ["Facing", l.facing.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())] : null,
+      l.roadWidthFt ? ["Road width", `${l.roadWidthFt} ft`] : null,
+    );
+  } else if (l.category === "commercial") {
+    tiles.push(
+      ["Type", l.typeName],
+      l.carpetAreaSqft ? ["Carpet area", formatArea(l.carpetAreaSqft)] : null,
+      l.fitoutStatus ? ["Fit-out", l.fitoutStatus.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())] : null,
+      l.workstations ? ["Workstations", String(l.workstations)] : null,
+    );
+  } else {
+    tiles.push(
+      l.bedrooms !== null ? ["Bedrooms", l.bedrooms === 0 ? "Studio" : `${l.bedrooms} BHK`] : null,
+      l.carpetAreaSqft ? ["Carpet area", formatArea(l.carpetAreaSqft)] : null,
+      l.furnishing ? ["Furnishing", FURNISHING_LABEL[l.furnishing]] : null,
+    );
+    if (l.transactionType === "rent" || l.transactionType === "lease") tiles.push(["Available", available(l.availableFrom)]);
+    else if (l.projectStatus && l.possessionDate) tiles.push(["Possession", formatDate(l.possessionDate, { month: "short", year: "numeric" })]);
+    else if (l.lifecycleStatus === "ready" || l.lifecycleStatus === "occupied") tiles.push(["Status", "Ready to move"]);
+  }
+  return tiles.filter((t): t is [string, string] => t !== null).slice(0, 4);
+}
+
 /** Declared rental yield as a percentage, or null. Based on the seller's figure, never an estimate of ours. */
 export function declaredYield(l: Pick<ListingSummary, "declaredMonthlyRent" | "price">): number | null {
   if (!l.declaredMonthlyRent || !l.price) return null;

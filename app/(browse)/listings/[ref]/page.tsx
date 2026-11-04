@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookingPanel } from "@/components/listings/BookingPanel";
 import { BookmarkButton } from "@/components/listings/BookmarkButton";
+import { ListingActionBar } from "@/components/listings/ListingActionBar";
+import { ListingCard } from "@/components/listings/ListingCard";
+import { ListingGallery } from "@/components/listings/ListingGallery";
+import { TrustPanel } from "@/components/listings/TrustPanel";
 import {
   ListingContact,
   ReportListing,
@@ -25,7 +28,7 @@ import {
   FOOD_LABEL,
   FURNISHING_LABEL,
   GENDER_LABEL,
-  keyFacts,
+  keyFactTiles,
   kindOf,
   MEALS_LABEL,
   OCCUPANCY_LABEL,
@@ -33,7 +36,7 @@ import {
 } from "@/lib/listings/describe";
 import { KIND_META } from "@/lib/listings/filters";
 import { CLOSED_LABELS } from "@/lib/listings/lifecycle";
-import { getListing, savedPropertyIds } from "@/lib/listings/queries";
+import { getListing, listingTrust, savedPropertyIds, similarListings } from "@/lib/listings/queries";
 import { istDateFromNow } from "@/lib/range";
 import { enquiryContext } from "@/lib/services/crm";
 import { unavailableDates } from "@/lib/services/stays/bookings";
@@ -65,11 +68,12 @@ export default async function ListingPage({ params, searchParams }: Props) {
 
   const kind = kindOf(listing);
   const meta = KIND_META[kind];
-  const saved = session
-    ? (await savedPropertyIds(session.user.id, [listing.propertyId])).has(
-        listing.propertyId,
-      )
-    : false;
+  const [trust, similar] = await Promise.all([
+    listingTrust(listing.id),
+    listing.status === "published" ? similarListings(listing.id, kind) : Promise.resolve({ rows: [], sameLocality: false }),
+  ]);
+  const savedIds = session ? await savedPropertyIds(session.user.id, [listing.propertyId, ...similar.rows.map((r) => r.propertyId)]) : new Set<string>();
+  const saved = savedIds.has(listing.propertyId);
   const stay = listing.stay;
   const today = todayInIndia();
   const unavailable = stay && listing.status === "published" ? await unavailableDates(listing.referenceId, today) : [];
@@ -92,8 +96,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const tourHref = `/listings/${listing.referenceId}/tour`;
   const price = priceParts(listing);
   const yieldPct = declaredYield(listing);
-  const [cover, ...rest] = listing.images;
-  const side = rest.slice(0, 2);
+  const tiles = keyFactTiles(listing);
+  // The phone bar: book a stay, or contact the agent; nothing when there's no one to contact.
+  const actionLabel = listing.status !== "published" ? null : stay ? "Check dates" : contact && !contact.isOwn ? "Contact agent" : null;
+  const actionNote =
+    (listing.transactionType === "rent" || listing.transactionType === "lease") && listing.depositAmount
+      ? `Deposit ${formatPrice(listing.depositAmount)}`
+      : stay?.cleaningFee
+        ? `+ ${formatPrice(stay.cleaningFee, { compact: false })} cleaning`
+        : null;
 
   const facts: [string, string][] = (
     [
@@ -253,48 +264,22 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </p>
         )}
 
-        {/* Gallery */}
-        <div
-          className={`mt-6 grid gap-2 ${side.length > 0 ? "sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""}`}
-        >
-          <div className="relative aspect-[16/10] overflow-hidden bg-sand sm:row-span-2">
-            {cover && (
-              <Image
-                src={cover.key}
-                alt={cover.alt ?? listing.title}
-                fill
-                preload
-                sizes="(min-width: 640px) 66vw, 100vw"
-                className="object-cover"
-              />
-            )}
-            {listing.tour && (
+        <ListingGallery
+          photos={listing.images}
+          title={listing.title}
+          overlay={
+            listing.tour && (
               <Link
                 href={tourHref}
-                className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-full bg-paper/95 px-4 py-2 text-[0.875rem] font-medium text-ink shadow-sm transition-colors hover:bg-paper"
+                className="absolute bottom-3 left-3 z-10 inline-flex items-center gap-2 rounded-full bg-paper/95 px-4 py-2 text-[0.875rem] font-medium text-ink shadow-sm transition-colors hover:bg-paper"
               >
                 <span aria-hidden>{has3d(listing.tour) ? "◈" : "◎"}</span>
                 {tourBadge(listing.tour)}
                 {!tourOpen && <span className="text-[0.75rem] font-normal text-stone-deep">· Plus</span>}
               </Link>
-            )}
-          </div>
-          {side.map((img) => (
-            // A lone side image spans both rows so the column has no gap under it.
-            <div
-              key={img.key}
-              className={`relative hidden overflow-hidden bg-sand sm:block ${side.length === 1 ? "sm:row-span-2" : "aspect-[16/10]"}`}
-            >
-              <Image
-                src={img.key}
-                alt={img.alt ?? ""}
-                fill
-                sizes="33vw"
-                className="object-cover"
-              />
-            </div>
-          ))}
-        </div>
+            )
+          }
+        />
 
         <div className="mt-10 grid gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-16">
           <div className="min-w-0">
@@ -310,26 +295,32 @@ export default async function ListingPage({ params, searchParams }: Props) {
               {listing.city ? `, ${listing.city}` : ""}
               {listing.postalCode ? ` ${listing.postalCode}` : ""}
             </p>
-            <p className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-[0.9375rem] text-graphite">
-              {keyFacts(listing).map((f, i) => (
-                <span key={f}>
-                  {i > 0 && (
-                    <span aria-hidden className="mr-3 text-stone">
-                      ·
-                    </span>
-                  )}
-                  {f}
+            {tiles.length > 0 && (
+              <dl className={`mt-6 grid grid-cols-2 gap-px border border-line-light bg-line-light ${TILE_COLUMNS[tiles.length]}`}>
+                {tiles.map(([label, value], i) => (
+                  <div key={label} className={`bg-paper px-4 py-3 ${tiles.length % 2 === 1 && i === tiles.length - 1 ? "col-span-2 sm:col-span-1" : ""}`}>
+                    <dt className="text-[0.75rem] text-stone-deep">{label}</dt>
+                    <dd className="mt-0.5 text-[0.9375rem] font-medium">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {trust.reviewedAt && (
+              <a href="#trust-panel" className="mt-4 flex items-center gap-2 text-[0.875rem] text-sage-deep lg:hidden">
+                <span aria-hidden className="font-semibold">✓</span>
+                <span>
+                  <span className="font-medium">Checked by Trustbrick</span> · reviewed {formatDate(trust.reviewedAt, { day: "numeric", month: "short", year: "numeric" })}
                 </span>
-              ))}
-            </p>
+                <span aria-hidden>›</span>
+              </a>
+            )}
 
+            {listing.tour && (
             <section aria-labelledby="tour-title" className="mt-10 border-t border-line-light pt-8">
               <h2 id="tour-title" className="text-[1.125rem] font-medium">
                 Virtual tour &amp; 3D view
               </h2>
-              {!listing.tour ? (
-                <p className="mt-3 text-[1rem] text-graphite">This {stay ? "stay" : "property"} doesn&apos;t have a virtual tour or 3D view yet.</p>
-              ) : tourOpen ? (
+              {tourOpen ? (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
                   <p className="text-[1rem] text-graphite">
                     This {stay ? "stay" : "property"} has a {describeTour(listing.tour)}. {has3d(listing.tour) ? "3D view available." : "No 3D model yet."}
@@ -344,6 +335,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 </div>
               )}
             </section>
+            )}
 
             {listing.description && (
               <section className="mt-10 border-t border-line-light pt-8">
@@ -612,7 +604,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
 
           {/* Price panel */}
           <aside className="lg:sticky lg:top-[calc(var(--sticky-top,var(--header-h))+1.5rem)] lg:self-start">
-            <div className="border border-line-light bg-paper p-6">
+            <div id="contact" className="scroll-mt-28 border border-line-light bg-paper p-6">
               <p className="flex flex-wrap items-baseline gap-x-1.5">
                 {price.prefix && (
                   <span className="text-[0.875rem] text-stone-deep">
@@ -765,13 +757,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   />
                 )}
               </div>
-              <p className="mt-4 text-[0.8125rem] leading-relaxed text-stone-deep">
-                Listed by {listing.organizationName}
-                {listing.publishedAt
-                  ? ` · ${formatDate(listing.publishedAt, { day: "numeric", month: "short", year: "numeric" })}`
-                  : ""}
-              </p>
-              <p className="mt-1 text-[0.75rem] text-stone-deep">
+              <div className="mt-5">
+                <TrustPanel trust={trust} reraId={listing.reraId} id="trust-panel" />
+              </div>
+              <p className="mt-4 text-[0.75rem] text-stone-deep">
                 Listing ID {listing.referenceId}
               </p>
               <div className="mt-4">
@@ -784,11 +773,42 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </div>
           </aside>
         </div>
+
+        {similar.rows.length > 0 && (
+          <section aria-labelledby="similar-title" className="mt-20 border-t border-line-light pt-10">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <h2 id="similar-title" className="display text-[clamp(1.75rem,3vw,2.5rem)] leading-tight">
+                More {SIMILAR_NOUN[kind]} in {similar.sameLocality ? listing.locality : (listing.city ?? listing.locality)}
+              </h2>
+              <Link href={meta.path} className="link-rule text-[0.875rem] font-medium text-brick">
+                See all →
+              </Link>
+            </div>
+            <ul className="mt-6 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+              {similar.rows.map((l) => (
+                <li key={l.id}>
+                  <ListingCard listing={l} kind={kind} saved={savedIds.has(l.propertyId)} isLoggedIn={Boolean(session)} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
       {shell && <ServiceFooter shell={shell} />}
+      {actionLabel && (
+        <>
+          <ListingActionBar price={price.amount} prefix={price.prefix} suffix={price.suffix} note={actionNote} action={actionLabel} target="contact" />
+          {/* Room at the bottom so the bar never covers the end of the page. */}
+          <div aria-hidden className="h-20 lg:hidden" />
+        </>
+      )}
     </div>
   );
 }
+
+const TILE_COLUMNS: Record<number, string> = { 1: "sm:grid-cols-1", 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4" };
+
+const SIMILAR_NOUN: Record<string, string> = { buy: "homes for sale", rent: "homes for rent", pg: "PGs", stay: "stays", invest: "properties" };
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
