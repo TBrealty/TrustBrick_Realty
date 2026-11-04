@@ -39,6 +39,7 @@ import {
 } from "@/lib/listings/onboarding-schema";
 import { type RequestContext, audit } from "../audit";
 import { resolveMapLink } from "../map-links";
+import { needsListingAgent, resolveListingAgent } from "../members";
 import { type ListingRecord, findListingInScope } from "./access";
 
 type Row = Record<string, unknown>;
@@ -132,6 +133,9 @@ export async function createDraft(actor: Actor, raw: unknown, ctx: RequestContex
   if (!place) throw invalid("Choose a locality.", { localityId: "Choose a locality" });
   const pin = await pinFrom(input.mapLink);
 
+  // Operators don't work leads: the listing is someone else's, and their enquiries go to them.
+  const agent = needsListingAgent(actor) ? await resolveListingAgent(actor, input.agent) : { userId: actor.userId, membershipId: actor.membershipId };
+
   const typeName = String(type.name);
   const draftTitle = `${typeName} in ${String(place.name)}`.slice(0, TITLE_MAX);
   const source = actor.organization.orgType === "personal" ? "user_submitted" : "org_submitted";
@@ -172,8 +176,8 @@ export async function createDraft(actor: Actor, raw: unknown, ctx: RequestContex
 
       await tx.insert(listingAgents).values({
         listingId: listing.id,
-        agentUserId: actor.userId,
-        membershipId: actor.membershipId,
+        agentUserId: agent.userId,
+        membershipId: agent.membershipId,
         role: "primary",
         assignedBy: actor.userId,
       });

@@ -9,7 +9,7 @@ import { api, assetUrl, authHeaders } from "@/api/client";
 import type { Gap, ListingActionView, ListingWorkspace } from "@/api/workspace-types";
 import { FormCards, FormText, SaveBar, Sheet } from "@/components/form";
 import { PressableScale, enter, thud, tick } from "@/components/motion";
-import { Badge, Button, ErrorState, Loading, Notice, Small } from "@/components/ui";
+import { Badge, Button, Chip, ErrorState, Loading, Notice, Small } from "@/components/ui";
 import { CLOSE_OUTCOME_LABELS, computeCommission } from "@/lib/commission/terms";
 import { formatDateTime, formatPrice } from "@/lib/format";
 import { CLOSE_OUTCOMES } from "@/lib/vocab";
@@ -162,6 +162,7 @@ function Hub({ ws, refreshing, onRefresh }: { ws: ListingWorkspace; refreshing: 
             );
           })}
         </Animated.View>
+        {ws.agentChoices.length > 0 && <AgentCard ws={ws} />}
         {!ws.editable && !ws.quickEdit && ["submitted", "under_review", "approved"].includes(l.status) && (
           <View style={{ paddingHorizontal: 16 }}>
             <Notice tone="info">Our team is reviewing this listing. You&apos;ll be notified when it&apos;s live or if anything needs changing.</Notice>
@@ -348,5 +349,37 @@ function ActionSheet({ ws, action, onClose }: { ws: ListingWorkspace; action: Li
         />
       </ScrollView>
     </Sheet>
+  );
+}
+
+/** Who customers' enquiries go to, and (for Owners, Managers, Supervisors and Operators) giving the listing to someone else. */
+function AgentCard({ ws }: { ws: ListingWorkspace }) {
+  const c = useColors();
+  const queryClient = useQueryClient();
+  const ref = ws.listing.referenceId;
+  const change = useMutation({
+    mutationFn: (agent: string) => api(`/partner/listings/${ref}/agent`, { method: "POST", body: { agent } }),
+    onSuccess: () => {
+      tick();
+      refreshListing(queryClient, ref);
+      void queryClient.invalidateQueries({ queryKey: ["partner-leads"] });
+    },
+  });
+  return (
+    <View style={{ marginHorizontal: 16, marginBottom: 16, gap: 10, padding: 16, borderRadius: radius.xl, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: c.text }}>Agent</Text>
+      <Small>{ws.listing.agent ? `${ws.listing.agent.name} gets this listing's enquiries.` : "Nobody gets this listing's enquiries yet."} Give it to someone else; its open leads and visits go too.</Small>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {ws.agentChoices.map((a) => (
+          <Chip
+            key={a.userReferenceId}
+            label={`${a.name}${a.isYou ? " (you)" : ""}`}
+            selected={change.isPending && change.variables === a.userReferenceId}
+            onPress={() => change.mutate(a.userReferenceId)}
+          />
+        ))}
+      </View>
+      {change.isError && <Notice>{(change.error as Error).message}</Notice>}
+    </View>
   );
 }

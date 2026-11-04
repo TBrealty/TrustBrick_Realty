@@ -15,6 +15,8 @@ export type OnboardingOptions = {
   amenities: { code: string; name: string; category: string }[];
   /** What this person may list (hosts: homestays only). */
   purposes: Purpose[];
+  /** Set for Operators, who don't work leads: they choose whose listing it is. */
+  agents: LeadAssignee[] | null;
 };
 
 export type MediaItem = {
@@ -160,6 +162,8 @@ export type ListingWorkspace = {
   categoryLabel: string;
   editable: boolean;
   quickEdit: boolean;
+  /** Who the listing can be given to; empty when this person can't change its agent. */
+  agentChoices: LeadAssignee[];
 };
 
 export type ListingsPage = Page<{

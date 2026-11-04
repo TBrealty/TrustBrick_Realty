@@ -8,7 +8,7 @@ import { api } from "@/api/client";
 import type { Category, OnboardingOptions, Purpose } from "@/api/workspace-types";
 import { SaveBar } from "@/components/form";
 import { PressableScale, thud, tick } from "@/components/motion";
-import { Button, ErrorState, Loading, Notice } from "@/components/ui";
+import { Button, Chip, ErrorState, Loading, Notice } from "@/components/ui";
 import { formErrors, useOnboardingOptions } from "@/partner/data";
 import { LocationFields } from "@/partner/location-fields";
 import type { Values } from "@/partner/property-fields";
@@ -45,11 +45,12 @@ function Wizard({ options }: { options: OnboardingOptions }) {
   const [purpose, setPurpose] = useState<Purpose | "">(options.purposes.length === 1 ? options.purposes[0] : "");
   const [type, setType] = useState("");
   const [values, setValues] = useState<Values>({ localityId: "", line1: "", line2: "", landmark: "", postalCode: "", mapLink: "" });
+  const [agent, setAgent] = useState("");
   const types = options.types.filter((t) => purpose && t.purposes.includes(purpose));
   const categories = [...new Set(types.map((t) => t.category))];
 
   const create = useMutation({
-    mutationFn: () => api<{ referenceId: string }>("/partner/listings", { method: "POST", body: { purpose, propertyType: type, ...values } }),
+    mutationFn: () => api<{ referenceId: string }>("/partner/listings", { method: "POST", body: { purpose, propertyType: type, ...values, agent: agent || undefined } }),
     onSuccess: ({ referenceId }) => {
       tick();
       void queryClient.invalidateQueries({ queryKey: ["partner-listings"] });
@@ -134,13 +135,25 @@ function Wizard({ options }: { options: OnboardingOptions }) {
           <Animated.View key="p2" entering={FadeInRight.duration(220)} exiting={FadeOutLeft.duration(150)} style={{ gap: 18 }}>
             <Heading title="Where is it?" detail={`${options.types.find((t) => t.code === type)?.name ?? ""} · ${purpose ? PURPOSES[purpose].label : ""}`} />
             <LocationFields options={options} values={values} errors={fields} onChange={(n, v) => setValues((x) => ({ ...x, [n]: v }))} />
+            {options.agents && (
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: c.text }}>Agent for this listing</Text>
+                <Text style={{ fontFamily: fonts.body, fontSize: 13, color: c.muted }}>Customers&apos; enquiries and visit requests go to them.</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {options.agents.map((a) => (
+                    <Chip key={a.userReferenceId} label={`${a.name} · ${a.roleName}`} selected={agent === a.userReferenceId} onPress={() => setAgent(a.userReferenceId)} />
+                  ))}
+                </View>
+                {fields.agent && <Notice>{fields.agent}</Notice>}
+              </View>
+            )}
           </Animated.View>
         )}
       </ScrollView>
       <SaveBar>
         {page > 0 && !(page === 1 && options.purposes.length === 1) && <Button label="Back" variant="ghost" onPress={() => go((page - 1) as 0 | 1)} />}
         {page === 2 ? (
-          <Button label="Create draft" variant="accent" loading={create.isPending} disabled={!values.localityId || String(values.line1).trim().length < 3} onPress={() => create.mutate()} style={{ flex: 1 }} />
+          <Button label="Create draft" variant="accent" loading={create.isPending} disabled={!values.localityId || String(values.line1).trim().length < 3 || (Boolean(options.agents) && !agent)} onPress={() => create.mutate()} style={{ flex: 1 }} />
         ) : (
           <Button label="Next" disabled={page === 0 ? !purpose : !type} onPress={() => go((page + 1) as 1 | 2)} style={{ flex: 1 }} />
         )}

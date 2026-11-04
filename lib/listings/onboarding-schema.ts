@@ -56,6 +56,8 @@ export const startSchema = z.object({
   purpose: z.enum(PURPOSES, { message: "Choose what the property is for" }),
   propertyType: z.string().regex(/^[a-z_]{2,40}$/, "Choose a property type"),
   ...locationFields,
+  /** The agent the listing is for (USR- reference). Only Operators choose one; everyone else is the agent. */
+  agent: z.preprocess(blankToUndefined, z.string().max(20).optional()),
 });
 export type StartInput = z.infer<typeof startSchema>;
 

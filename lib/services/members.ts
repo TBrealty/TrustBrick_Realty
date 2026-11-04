@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertCan, can } from "@/lib/authz";
 import type { Actor } from "@/lib/authz/actor";
 import { AGENT_ORG_ROLES, LEAD_HOLDING_ROLES, ORG_ROLES, ORG_ROLE_RANK, ROLES, type OrgRole, isOrgRole } from "@/lib/authz/catalog";
-import { leadScope } from "@/lib/authz/scope";
+import { leadScope, listingScope } from "@/lib/authz/scope";
 import { type Tx, db } from "@/lib/db";
 import { sendEmail } from "@/lib/email/send";
 import { agentApprovedMessage, joinRequestDeclinedMessage, memberInvitationMessage, membershipChangedMessage } from "@/lib/email/templates";
@@ -184,12 +184,13 @@ export async function getMember(actor: Actor, userReferenceId: string): Promise<
 /** An agent or supervisor whose agent profile isn't active can't hold anything. */
 const agentBlocked = (m: { role: OrgRole | null; agentStatus: string | null }) => m.role !== null && AGENT_ORG_ROLES.includes(m.role) && m.agentStatus !== "active";
 
-/** People a lead can be given to by this actor: in their team (Supervisors) or organization. */
-export async function leadAssignees(actor: Actor): Promise<{ userReferenceId: string; name: string; roleName: string; isYou: boolean }[]> {
-  if (!can(actor, "leads.assign", "team") || !inOrganization(actor)) return [];
-  const teamOnly = actor.permissions["leads.assign"] === "team";
+export type Assignee = { userReferenceId: string; name: string; roleName: string; isYou: boolean };
+type Holder = Assignee & { userId: string; membershipId: string };
+
+/** Active members who work leads (and so can hold a lead or a listing), in the actor's team or organization. */
+async function holders(actor: Actor, teamOnly: boolean): Promise<Holder[]> {
   const { rows } = await db.execute(sql`
-    SELECT u.reference_id, u.name, ${roleColumn} AS role, ap.status AS agent_status, m.id AS membership_id
+    SELECT u.id AS user_id, u.reference_id, u.name, ${roleColumn} AS role, ap.status AS agent_status, m.id AS membership_id
       FROM orgs.memberships m JOIN identity.users u ON u.id = m.user_id AND u.status = 'active'
       LEFT JOIN orgs.agent_profiles ap ON ap.user_id = m.user_id
      WHERE m.organization_id = ${actor.organization.id} AND m.status = 'active'
@@ -198,7 +199,111 @@ export async function leadAssignees(actor: Actor): Promise<{ userReferenceId: st
   return (rows as Row[])
     .map((r) => ({ role: isOrgRole(r.role) ? r.role : null, agentStatus: (r.agent_status as string) ?? null, r }))
     .filter(({ role, agentStatus }) => role && LEAD_HOLDING_ROLES.includes(role) && !agentBlocked({ role, agentStatus }))
-    .map(({ role, r }) => ({ userReferenceId: String(r.reference_id), name: String(r.name), roleName: roleName(role), isYou: String(r.membership_id) === actor.membershipId }));
+    .map(({ role, r }) => ({
+      userId: String(r.user_id),
+      membershipId: String(r.membership_id),
+      userReferenceId: String(r.reference_id),
+      name: String(r.name),
+      roleName: roleName(role),
+      isYou: String(r.membership_id) === actor.membershipId,
+    }));
+}
+
+const publicHolder = ({ userReferenceId, name, roleName: role, isYou }: Holder): Assignee => ({ userReferenceId, name, roleName: role, isYou });
+
+/** People a lead can be given to by this actor: in their team (Supervisors) or organization. */
+export async function leadAssignees(actor: Actor): Promise<Assignee[]> {
+  if (!can(actor, "leads.assign", "team") || !inOrganization(actor)) return [];
+  return (await holders(actor, actor.permissions["leads.assign"] === "team")).map(publicHolder);
+}
+
+/** People who can be a listing's agent for this actor: who works leads, in their team (Supervisors) or organization. */
+export async function listingAgentChoices(actor: Actor): Promise<Assignee[]> {
+  if (!inOrganization(actor) || !can(actor, "listings.edit", "team")) return [];
+  return (await holders(actor, actor.permissions["listings.edit"] === "team")).map(publicHolder);
+}
+
+/**
+ * Operators prepare listings but don't work leads, so a listing they create needs someone else as
+ * its agent: the person customers' enquiries go to.
+ */
+export const needsListingAgent = (actor: Actor) => inOrganization(actor) && !can(actor, "leads.view");
+
+/** The member a listing is given to, checked against who this actor may choose. */
+export async function resolveListingAgent(actor: Actor, raw: unknown): Promise<{ userId: string; membershipId: string; name: string }> {
+  const ref = typeof raw === "string" ? normalizeReferenceId(raw) : "";
+  const pick = ref ? (await holders(actor, actor.permissions["listings.edit"] === "team")).find((h) => h.userReferenceId === ref) : undefined;
+  if (!pick) throw invalid("Choose the agent for this listing.", { agent: "Choose the agent customers' enquiries go to" });
+  return { userId: pick.userId, membershipId: pick.membershipId, name: pick.name };
+}
+
+/**
+ * Gives a listing to another agent. Its open leads, upcoming visits and stay bookings go with it,
+ * so whoever holds the listing holds the conversations about it; closed ones keep their history.
+ */
+export async function assignListingAgent(actor: Actor, listingReferenceId: string, rawUserReferenceId: unknown, ctx: RequestContext) {
+  assertCan(actor, "listings.edit", "team");
+  if (!inOrganization(actor) || !isReferenceId(listingReferenceId, "LST")) throw notFound();
+  const target = await resolveListingAgent(actor, rawUserReferenceId);
+
+  await db.transaction(async (tx) => {
+    const found = await tx.execute(sql`
+      SELECT l.id, l.title FROM marketplace.listings l
+       WHERE l.reference_id = ${listingReferenceId} AND l.deleted_at IS NULL AND ${listingScope(actor, "listings.edit")} FOR UPDATE OF l`);
+    const listing = found.rows[0] as Row | undefined;
+    if (!listing) throw notFound();
+    const listingId = String(listing.id);
+    const currentRow = await tx.execute(sql`
+      SELECT agent_user_id FROM marketplace.listing_agents WHERE listing_id = ${listingId} AND role = 'primary' AND ended_at IS NULL`);
+    const previous = ((currentRow.rows[0] as Row | undefined)?.agent_user_id as string | undefined) ?? null;
+    if (previous === target.userId) return;
+
+    await tx.execute(sql`UPDATE marketplace.listing_agents SET ended_at = now() WHERE listing_id = ${listingId} AND role = 'primary' AND ended_at IS NULL`);
+    const promoted = await tx.execute(sql`
+      UPDATE marketplace.listing_agents SET role = 'primary' WHERE listing_id = ${listingId} AND agent_user_id = ${target.userId} AND ended_at IS NULL`);
+    if (!promoted.rowCount) {
+      await tx.execute(sql`
+        INSERT INTO marketplace.listing_agents (id, listing_id, agent_user_id, membership_id, role, assigned_by)
+        VALUES (gen_random_uuid(), ${listingId}, ${target.userId}, ${target.membershipId}, 'primary', ${actor.userId})`);
+    }
+    if (previous) {
+      await tx.execute(sql`
+        WITH moved AS (
+          UPDATE crm.leads SET agent_user_id = ${target.userId}, agent_membership_id = ${target.membershipId}, updated_at = now()
+           WHERE listing_id = ${listingId} AND agent_user_id = ${previous} AND deleted_at IS NULL AND status NOT IN ('converted', 'lost') RETURNING id)
+        INSERT INTO crm.lead_activities (id, lead_id, activity_type, body, actor_user_id)
+        SELECT gen_random_uuid(), id, 'assigned', ${`The listing went to ${target.name}, with this lead`}, ${actor.userId} FROM moved`);
+      await tx.execute(sql`
+        UPDATE crm.visits SET agent_user_id = ${target.userId}, updated_at = now()
+         WHERE listing_id = ${listingId} AND agent_user_id = ${previous} AND status IN ('requested', 'scheduled')`);
+      await tx.execute(sql`
+        UPDATE stays.bookings SET host_user_id = ${target.userId}, updated_at = now()
+         WHERE listing_id = ${listingId} AND host_user_id = ${previous} AND status IN ('requested', 'confirmed', 'checked_in')`);
+      await tx.execute(sql`
+        UPDATE stays.conversations SET host_user_id = ${target.userId}, updated_at = now()
+         WHERE listing_id = ${listingId} AND host_user_id = ${previous} AND guest_user_id <> ${target.userId}`);
+    }
+    await audit(
+      tx,
+      actor,
+      {
+        event: "LISTING_AGENT_CHANGED",
+        target: { type: "listing", id: listingId, referenceId: listingReferenceId },
+        organizationId: actor.organization.id,
+        before: { agentUserId: previous },
+        after: { agentUserId: target.userId },
+      },
+      ctx,
+    );
+    if (target.userId !== actor.userId) {
+      await notify(tx, [target.userId], {
+        type: "lead_assigned",
+        title: `${String(listing.title)} is now yours`,
+        body: `${actor.name} made you its agent. Its open leads and visits came with it.`,
+        link: `/properties/${listingReferenceId}`,
+      });
+    }
+  });
 }
 
 // ── Shared steps ─────────────────────────────────────────────────────────────

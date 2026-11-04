@@ -11,12 +11,14 @@ import { applyAsAgent } from "@/lib/services/agents";
 import { canAcceptTerms } from "@/lib/services/commission";
 import { createEnquiry, getLead, listLeads } from "@/lib/services/crm";
 import { professionalDashboard } from "@/lib/services/dashboard";
+import { createDraft } from "@/lib/services/listings/onboarding";
 import { getListingForActor } from "@/lib/services/listings/queries";
 import { transitionListing } from "@/lib/services/listings/lifecycle";
 import {
   acceptMemberInvitation,
   approveJoinRequest,
   assignLead,
+  assignListingAgent,
   changeMemberRole,
   createTeam,
   declineJoinRequest,
@@ -33,7 +35,7 @@ import {
 } from "@/lib/services/members";
 import { canManagePartnerSubscription } from "@/lib/services/subscriptions";
 import { resolveRange } from "@/lib/range";
-import { actorFor, ctx, makeAdmin, makeAgent, makeOrg, makeSession, makeUser, one, person } from "./support/factory";
+import { actorFor, ctx, locality, makeAdmin, makeAgent, makeOrg, makeSession, makeUser, one, person } from "./support/factory";
 import { readyRentListing } from "./support/listings";
 
 const code = (p: Promise<unknown>) => p.then(() => "OK").catch((e: unknown) => (e instanceof AppError ? e.code : `THREW ${String(e)}`));
@@ -299,5 +301,38 @@ describe("requests to join", () => {
     const profile = await one<{ status: string; status_reason: string }>(sql`SELECT status, status_reason FROM orgs.agent_profiles WHERE user_id = ${applicant.id}`);
     expect(profile).toEqual({ status: "rejected", status_reason: "We don't have an agent by this name." });
     expect(await code(actorFor(applicant.id))).not.toBe("OK");
+  });
+});
+
+describe("whose listing it is", () => {
+  it("an Operator's listing belongs to the agent they choose", async () => {
+    const operator = await (await join(owner, "operator")).actor();
+    const agent = await join(owner, "agent");
+    const start = { purpose: "rent", propertyType: "apartment", localityId: await locality(), line1: "Operator Towers, Road 1" };
+    expect(await code(createDraft(operator, start, ctx))).toBe("VALIDATION_ERROR");
+    const { referenceId } = await createDraft(operator, { ...start, agent: agent.userReferenceId }, ctx);
+    const holder = await one<{ agent_user_id: string }>(sql`
+      SELECT la.agent_user_id FROM marketplace.listing_agents la JOIN marketplace.listings l ON l.id = la.listing_id
+       WHERE l.reference_id = ${referenceId} AND la.ended_at IS NULL AND la.role = 'primary'`);
+    expect(holder.agent_user_id).toBe(agent.userId);
+  });
+
+  it("changing a listing's agent takes its open leads with it", async () => {
+    const from = await join(owner, "agent");
+    const to = await join(owner, "agent");
+    const fromActor = await from.actor();
+    const ref = await readyRentListing(fromActor, { title: "Flat that gets a new agent" });
+    const admin = await (await makeAdmin(["listings.approve", "listings.view"])).actor();
+    await transitionListing(fromActor, ref, "submit", {}, ctx);
+    await transitionListing(admin, ref, "approve", { reason: "Checked the details and photos." }, ctx);
+    const customer = await makeUser("Agent Change Customer");
+    const { leadReferenceId } = await createEnquiry({ userId: customer.id, email: customer.email }, ref, { name: "Agent Change Customer", phone: "9876543210" });
+
+    expect(await code(assignListingAgent(fromActor, ref, to.userReferenceId, ctx))).toBe("FORBIDDEN");
+    await assignListingAgent(owner, ref, to.userReferenceId, ctx);
+    const toActor = await to.actor();
+    expect((await getListingForActor(toActor, ref)).referenceId).toBe(ref);
+    expect((await getLead(toActor, leadReferenceId)).referenceId).toBe(leadReferenceId);
+    expect(await code(getListingForActor(fromActor, ref))).toBe("NOT_FOUND");
   });
 });

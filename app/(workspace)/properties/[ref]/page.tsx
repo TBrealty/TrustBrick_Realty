@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ListingTourCard } from "@/components/tours/ListingTourCard";
+import { ActionForm, Select, Submit } from "@/components/workspace/forms";
 import { ListingActions } from "@/components/workspace/ListingActions";
 import { ListingCommissionCard } from "@/components/workspace/ListingCommissionCard";
 import { ListingOverview } from "@/components/workspace/ListingOverview";
@@ -18,6 +19,8 @@ import { auditTrailFor } from "@/lib/services/audit-log";
 import { latestListingForProperty } from "@/lib/services/listings/access";
 import { dealContextFor, listingCommission } from "@/lib/services/commission";
 import { getListingForActor } from "@/lib/services/listings/queries";
+import { listingAgentChoices } from "@/lib/services/members";
+import { assignListingAgentAction } from "../actions";
 import { tourDataForProperty } from "@/lib/services/tours";
 import { isLiveForTours } from "@/lib/tours/terms";
 
@@ -44,10 +47,11 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
   const reviews = listing.cases.filter((c) => c.caseType === "listing_review");
   const openCase = reviews.find((c) => c.status === "open" || c.status === "in_review");
   const canEdit = actor.workspace === "professional" && can(actor, "listings.edit") && isEditable(listing.status);
-  const [deal, commission, tour] = await Promise.all([
+  const [deal, commission, tour, agents] = await Promise.all([
     ["published", "paused"].includes(listing.status) ? dealContextFor(listing) : null,
     listingCommission(actor, listing),
     tourDataForProperty(listing.propertyId),
+    actor.workspace === "professional" && !["archived", "removed", "transacted"].includes(listing.status) ? listingAgentChoices(actor) : [],
   ]);
 
   return (
@@ -204,6 +208,20 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
               ["Published", listing.publishedAt ? formatDay(listing.publishedAt) : null],
             ]}
           />
+          {agents.length > 0 && (
+            <ActionForm action={assignListingAgentAction} className="mt-5 space-y-3 border-t border-line-light pt-5">
+              <input type="hidden" name="ref" value={listing.referenceId} />
+              <Select
+                label="Change agent"
+                name="agent"
+                required
+                placeholder="Choose"
+                options={agents.map((a) => ({ value: a.userReferenceId, label: `${a.name}${a.isYou ? " (you)" : ""} · ${a.roleName}` }))}
+                hint="Its open leads, upcoming visits and stay bookings go to them too."
+              />
+              <Submit variant="secondary">Change agent</Submit>
+            </ActionForm>
+          )}
         </Card>
         <Card title="Status history">
           <Timeline

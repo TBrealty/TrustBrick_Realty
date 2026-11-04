@@ -9,6 +9,7 @@ import { MAP_LINK_MESSAGES, type Pin } from "@/lib/listings/map-link";
 import { RULES, limit } from "@/lib/auth/rate-limit";
 import { transitionListing } from "@/lib/services/listings/lifecycle";
 import { createDraft, updateAmenities, updateDetails, updateLocation, updatePricing } from "@/lib/services/listings/onboarding";
+import { assignListingAgent } from "@/lib/services/members";
 import { resolveMapLink } from "@/lib/services/map-links";
 import { deleteListingMedia, reorderListingMedia, updateMediaAlt } from "@/lib/services/media";
 import { updateTourLink } from "@/lib/services/tours";
@@ -44,6 +45,12 @@ export async function transitionAction(_prev: Result | null, form: FormData): Pr
   }
   if (result.ok && isListingAction(action)) return { ok: true, message: `${LISTING_ACTIONS[action].label}: done.` };
   return result;
+}
+
+export async function assignListingAgentAction(_prev: Result | null, form: FormData): Promise<Result> {
+  const ref = text(form, "ref");
+  const result = await runAction("listing.agent", (actor, ctx) => assignListingAgent(actor, ref, text(form, "agent"), ctx), { revalidate: [...paths(ref), "/leads", "/visits"] });
+  return result.ok ? { ok: true, message: "Agent changed. They've been notified." } : result;
 }
 
 export async function createDraftAction(_prev: Result | null, form: FormData): Promise<Result> {

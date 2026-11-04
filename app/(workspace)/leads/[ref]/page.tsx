@@ -130,7 +130,7 @@ export default async function LeadPage({ params }: Props) {
           </Card>
           {canManage && next.length > 0 && (
             <Card title="Move to stage">
-              <ActionForm action={leadStatusAction} className="space-y-3">
+              <ActionForm action={leadStatusAction} className="space-y-3" resetOnSuccess>
                 <input type="hidden" name="ref" value={ref} />
                 <Select label="New stage" name="status" required options={next.map((s) => ({ value: s, label: LEAD_STATUS_LABELS[s] }))} />
                 <TextInput label="If lost, why?" name="lostReason" hint="Required when marking a lead lost." />

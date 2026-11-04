@@ -33,7 +33,18 @@ const LOCATION_FIELDS = ["localityId", "line1", "line2", "landmark", "postalCode
  * Steps 1–4 of Onboard Property. One form; the steps only change what is visible. The draft
  * is created on the server when this form is submitted, and the rest of the workflow edits it.
  */
-export function StartWizard({ options, purposes, initialPurpose }: { options: OnboardingOptions; purposes: Purpose[]; initialPurpose?: Purpose }) {
+/** `agents` is set for Operators, who don't work leads: they choose whose listing it is. */
+export function StartWizard({
+  options,
+  purposes,
+  initialPurpose,
+  agents,
+}: {
+  options: OnboardingOptions;
+  purposes: Purpose[];
+  initialPurpose?: Purpose;
+  agents?: { userReferenceId: string; name: string; roleName: string }[];
+}) {
   const { state, pending, formAction, onSubmit } = useFormAction<ActionResult>(createDraftAction);
   // A single allowed purpose (hosts can only list homestays) skips the question entirely.
   const start = purposes.length === 1 ? purposes[0] : initialPurpose && purposes.includes(initialPurpose) ? initialPurpose : null;
@@ -201,6 +212,23 @@ export function StartWizard({ options, purposes, initialPurpose }: { options: On
           <div className="mt-5">
             <MapLinkField error={errors.mapLink} />
           </div>
+
+          {agents && (
+            <div className="mt-5">
+              <Labeled id="agent" label="Agent for this listing" required error={errors.agent} hint="Customers' enquiries and visit requests go to them.">
+                <select id="agent" name="agent" className="winput" defaultValue="" aria-invalid={errors.agent ? true : undefined}>
+                  <option value="" disabled>
+                    Choose
+                  </option>
+                  {agents.map((a) => (
+                    <option key={a.userReferenceId} value={a.userReferenceId}>
+                      {a.name} · {a.roleName}
+                    </option>
+                  ))}
+                </select>
+              </Labeled>
+            </div>
+          )}
 
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <CreateButton disabled={!purpose || !type} pending={pending} />

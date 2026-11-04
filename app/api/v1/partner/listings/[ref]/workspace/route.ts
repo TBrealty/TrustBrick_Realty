@@ -5,6 +5,7 @@ import { LISTING_ACTIONS, STATUS_LABELS, actionLabel, availableListingActions, i
 import { CATEGORY_LABELS, PURPOSE_LABELS } from "@/lib/listings/onboarding-schema";
 import { listingCard } from "@/lib/services/listings/card";
 import { submissionGaps } from "@/lib/services/listings/lifecycle";
+import { listingAgentChoices } from "@/lib/services/members";
 import { getListingForActor } from "@/lib/services/listings/queries";
 import { dealContextFor } from "@/lib/services/commission";
 
@@ -17,10 +18,11 @@ import { dealContextFor } from "@/lib/services/commission";
 export const GET = apiRoute<{ ref: string }>("v1.partner.listing_workspace", { auth: "user" }, async ({ actor, params }) => {
   const a = await actor();
   const listing = await getListingForActor(a, params.ref);
-  const [card, gaps, deal] = await Promise.all([
+  const [card, gaps, deal, agentChoices] = await Promise.all([
     listingCard(a, params.ref),
     submissionGaps(db, listing.id),
     ["published", "paused"].includes(listing.status) ? dealContextFor(listing) : null,
+    a.workspace === "professional" && !["archived", "removed", "transacted"].includes(listing.status) ? listingAgentChoices(a) : [],
   ]);
   const actions = availableListingActions(a, listing.status).map((action) => {
     const def = LISTING_ACTIONS[action] as { confirm?: string; reasonRequired?: boolean };
@@ -39,5 +41,7 @@ export const GET = apiRoute<{ ref: string }>("v1.partner.listing_workspace", { a
     /** The edit steps can be used now (a draft, or sent back); a live listing takes quick edits (`terms`) instead. */
     editable: team && isEditable(listing.status),
     quickEdit: team && ["published", "paused"].includes(listing.status),
+    /** Who the listing can be given to (Owners, Managers, Supervisors and Operators); empty for everyone else. */
+    agentChoices,
   };
 });
