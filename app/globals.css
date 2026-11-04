@@ -297,29 +297,23 @@
   transform: none;
 }
 
-/* ── Hero entrance (pure CSS so it starts before hydration) ─────────────── */
-@keyframes hero-aperture {
-  from {
-    clip-path: inset(5% 4% 5% 4%);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
-}
+/* ── Hero entrance: in the first paint, before any JavaScript ─────────────── */
 @keyframes hero-settle {
   from {
-    transform: scale(1.09);
+    transform: scale(1.035);
   }
   to {
     transform: scale(1.01);
   }
 }
-@keyframes line-rise {
+@keyframes hero-title-in {
   from {
-    transform: translate3d(0, 108%, 0);
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
   }
   to {
-    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes fade-rise {
@@ -330,22 +324,6 @@
   to {
     opacity: 1;
     transform: none;
-  }
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes rule-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
   }
 }
 @keyframes scroll-cue {
@@ -367,11 +345,11 @@
   }
 }
 
-.hero-aperture {
-  animation: hero-aperture 1s var(--ease-out) both;
-}
 .hero-settle {
-  animation: hero-settle 1.6s var(--ease-out) both;
+  animation: hero-settle 1.4s var(--ease-out) both;
+}
+.hero-title-in {
+  animation: hero-title-in 0.45s var(--ease-out) both;
 }
 .line-mask {
   display: block;
@@ -381,37 +359,10 @@
 }
 .line-mask > span {
   display: block;
-  animation: line-rise 1.05s var(--ease-out) both;
-  animation-delay: var(--d, 0ms);
-}
-.enter-rise {
-  animation: fade-rise 0.95s var(--ease-out) both;
-  animation-delay: var(--d, 0ms);
-}
-.enter-fade {
-  animation: fade-in 1s var(--ease-out) both;
-  animation-delay: var(--d, 0ms);
-}
-.enter-rule {
-  transform-origin: left;
-  animation: rule-draw 1.3s var(--ease-out) both;
-  animation-delay: var(--d, 0ms);
 }
 .scroll-cue {
   animation: scroll-cue 2.4s var(--ease-in-out) infinite;
   animation-delay: 2s;
-}
-
-/* The opening sequence waits for the photograph and the display font, then plays
-   as one piece (see HeroMedia). Without JS nothing is gated and it just runs. */
-.js:not(.hero-ready) .hero-aperture,
-.js:not(.hero-ready) .hero-settle,
-.js:not(.hero-ready) .line-mask > span,
-.js:not(.hero-ready) .enter-rise,
-.js:not(.hero-ready) .enter-fade,
-.js:not(.hero-ready) .enter-rule,
-.js:not(.hero-ready) .scroll-cue {
-  animation-play-state: paused;
 }
 
 /* ── Scroll reveals (activated by MotionController) ─────────────────────── */
@@ -629,15 +580,6 @@ html:has(dialog.photo-viewer[open]) {
     transform: none;
     clip-path: none;
   }
-  /* Never hold the opening behind the gate when motion is reduced. */
-  .js:not(.hero-ready) .hero-aperture,
-  .js:not(.hero-ready) .hero-settle,
-  .js:not(.hero-ready) .line-mask > span,
-  .js:not(.hero-ready) .enter-rise,
-  .js:not(.hero-ready) .enter-fade,
-  .js:not(.hero-ready) .enter-rule {
-    animation-play-state: running !important;
-  }
   .ring-pulse,
   .scroll-cue {
     animation: none !important;
@@ -658,7 +600,7 @@ html:has(dialog.photo-viewer[open]) {
     transform: none;
   }
 }
-/* ── Standalone pages: a light entrance that is not tied to the hero gate ── */
+/* ── Standalone pages: a light entrance ──────────────────────────────────── */
 .page-in {
   animation: fade-rise 0.7s var(--ease-smooth) both;
 }

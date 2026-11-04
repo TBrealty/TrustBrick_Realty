@@ -171,7 +171,7 @@ export function SiteHeader() {
           hidden && !open ? "-translate-y-full" : "translate-y-0",
         ].join(" ")}
       >
-        <div className="shell enter-fade flex h-(--header-h) items-center justify-between gap-3 sm:gap-6 lg:grid lg:grid-cols-[1fr_auto_1fr]" style={{ "--d": "240ms" } as React.CSSProperties}>
+        <div className="shell flex h-(--header-h) items-center justify-between gap-3 sm:gap-6 lg:grid lg:grid-cols-[1fr_auto_1fr]">
           <a href="#top" className="-m-2 shrink-0 p-2 lg:justify-self-start" aria-label={`${site.name} — back to top`}>
             {/* Always the brand's brick and green; only the arch and "Trust" follow the bar's text colour. */}
             <Logo tone="brand" markClassName="size-7" />
