@@ -7,9 +7,11 @@ import type { ListingSummary } from "@/lib/listings/types";
  * What the landing page shows from the live catalogue: a few rows of real listings, the same
  * ones the app's home screen has, and the locations for the hero's search.
  *
- * Shared by every visitor and kept for a minute, so the landing page doesn't query the database
- * on each view. If the database can't be reached the rows are simply empty: the landing page
- * must load whatever happens behind it.
+ * Shared by every visitor and refreshed at most once a minute, in the background: a visitor is
+ * served the last good copy straight away and never waits for the database (except the very
+ * first view after the server starts, which the deploy script makes itself). If the database
+ * can't be reached, the last good copy stays; with none yet, the rows are simply empty: the
+ * landing page must load whatever happens behind it.
  */
 
 export type HomeRow = { id: "tours" | "fresh" | "stays"; title: string; subtitle: string; kind: ListingKind; href: string; items: ListingSummary[] };
@@ -17,7 +19,8 @@ export type HomeData = { rows: HomeRow[]; locations: { slug: string; name: strin
 
 const TTL_MS = 60_000;
 const ROW_SIZE = 8;
-let cached: { at: number; data: Promise<HomeData> } | null = null;
+let fresh: { at: number; data: HomeData } | null = null;
+let loading: Promise<HomeData> | null = null;
 
 /** Newest first across several kinds, without repeats. */
 function merge(lists: ListingSummary[][]): ListingSummary[] {
@@ -48,16 +51,26 @@ async function load(): Promise<HomeData> {
   return { rows: rows.filter((r) => r.items.length > 0), locations: options.cities.map((c) => ({ slug: c.slug, name: c.name })) };
 }
 
-export function homeData(): Promise<HomeData> {
-  const now = Date.now();
-  if (!cached || now - cached.at > TTL_MS) {
-    const data = load().catch((error) => {
+/** Loads the rows once, however many views ask at the same time. */
+function refresh(): Promise<HomeData> {
+  loading ??= load()
+    .then((data) => {
+      fresh = { at: Date.now(), data };
+      return data;
+    })
+    .catch((error) => {
       console.error("[home] couldn't load the landing page's listings:", error instanceof Error ? error.message : error);
-      // Try again on the next view rather than keeping the failure for a minute.
-      cached = null;
-      return { rows: [], locations: [] };
+      // Keep what we had; the next view tries again.
+      return fresh?.data ?? { rows: [], locations: [] };
+    })
+    .finally(() => {
+      loading = null;
     });
-    cached = { at: now, data };
-  }
-  return cached.data;
+  return loading;
+}
+
+export function homeData(): Promise<HomeData> {
+  if (!fresh) return refresh();
+  if (Date.now() - fresh.at > TTL_MS) void refresh();
+  return Promise.resolve(fresh.data);
 }
