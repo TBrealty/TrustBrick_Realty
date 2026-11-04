@@ -47,8 +47,11 @@ export default async function BecomeAnAgentPage({ searchParams }: { searchParams
             </p>
           )}
           {application.state === "pending" && (
-            <Notice title="Your application is being reviewed">
-              Reference <span className="font-mono">{application.referenceId}</span>. A Trustbrick admin reviews it, usually within two working days, and we&apos;ll email you the decision.
+            <Notice title={application.joining ? `Your request to join ${application.joining} is waiting` : "Your application is being reviewed"}>
+              Reference <span className="font-mono">{application.referenceId}</span>.{" "}
+              {application.joining
+                ? `${application.joining}'s Owners and Managers decide, and we'll email you when they do. If it's taking a while, ask them to look at Team in their workspace.`
+                : "A Trustbrick admin reviews it, usually within two working days, and we'll email you the decision."}
             </Notice>
           )}
           {application.state === "active" && (

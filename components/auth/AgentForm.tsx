@@ -108,8 +108,8 @@ export function AgentForm({
               value={route}
               onChange={(value) => setRoute(value as OrgRoute)}
               options={[
-                { value: "new_organization", title: "Register my organization", description: "It's new to Trustbrick. You'll be its admin once approved." },
-                { value: "join_organization", title: "It's already on Trustbrick", description: "Join it with the ORG- reference its admin gives you." },
+                { value: "new_organization", title: "Register my organization", description: "It's new to Trustbrick. You'll be its Owner once approved." },
+                { value: "join_organization", title: "It's already on Trustbrick", description: "Ask to join with its ORG- reference. Its Owner or a Manager approves you." },
               ]}
             />
 
@@ -121,7 +121,7 @@ export function AgentForm({
                 placeholder="ORG-XXXXXXXX"
                 defaultValue={v.organizationReference}
                 error={e.organizationReference}
-                hint="Ask your organization's admin for it: it's on their Trustbrick workspace."
+                hint="Ask your organization's Owner or a Manager for it. They can also add you directly from their workspace, without this form."
               />
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -188,7 +188,9 @@ export function AgentForm({
         <p className="text-[0.8125rem] leading-relaxed text-stone-deep">
           {withAccount
             ? "We'll email you a link to confirm your address. Your application goes to our team as soon as you confirm, and we'll email you when it's decided."
-            : "A Trustbrick admin reviews every application. We'll email you when it's decided."}{" "}
+            : joining === "organization" && route === "join_organization"
+              ? "Your request goes to the organization's Owners and Managers. We'll email you when they decide."
+              : "A Trustbrick admin reviews every application. We'll email you when it's decided."}{" "}
           By applying you agree to the{" "}
           <a href="/terms" className="link-rule text-ink">
             Terms of Use

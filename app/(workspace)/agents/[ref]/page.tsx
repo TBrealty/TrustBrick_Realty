@@ -40,9 +40,9 @@ export default async function AgentPage({ params }: Props) {
   const canManage = can(actor, "agents.manage", "platform");
   const org = agent.newOrganization;
   const approveDescription = org
-    ? `${org.name} goes live on Trustbrick and ${agent.name} becomes its admin, with their own workspace. Check the GST number and address first.`
+    ? `${org.name} goes live on Trustbrick and ${agent.name} becomes its Owner, with their own workspace. Check the GST number and address first.`
     : agent.requestedOrganization
-      ? `They join ${agent.requestedOrganization.name} and get an agent workspace.`
+      ? `They join ${agent.requestedOrganization.name} as an Agent. This is normally ${agent.requestedOrganization.name}'s decision: its Owners and Managers see the request in their workspace.`
       : "They get an agent workspace in their own independent organization.";
   const applyingAs = org ? "Registering a new organization" : agent.applicationType === "join_organization" ? "Joining an organization on Trustbrick" : "Individual agent";
 

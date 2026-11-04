@@ -7,7 +7,7 @@ import { AGENT_ORG_ROLES, LEAD_HOLDING_ROLES, ORG_ROLES, ORG_ROLE_RANK, ROLES, t
 import { leadScope } from "@/lib/authz/scope";
 import { type Tx, db } from "@/lib/db";
 import { sendEmail } from "@/lib/email/send";
-import { memberInvitationMessage, membershipChangedMessage } from "@/lib/email/templates";
+import { agentApprovedMessage, joinRequestDeclinedMessage, memberInvitationMessage, membershipChangedMessage } from "@/lib/email/templates";
 import { env } from "@/lib/env";
 import { AppError, conflict, invalid, isUniqueViolation, notFound } from "@/lib/errors";
 import { fieldErrorsFrom } from "@/lib/listings/onboarding-schema";
@@ -568,19 +568,7 @@ export async function acceptMemberInvitation(token: string, input: AcceptInput, 
       await ensureAgentProfile(tx, account.userId, { phone: (inv.phone as string) ?? null, rera: (inv.rera_agent_number as string) ?? null }, invitedBy, organizationId);
     }
 
-    const membership = await tx.execute(sql`
-      INSERT INTO orgs.memberships (id, user_id, organization_id, status, created_by)
-      VALUES (gen_random_uuid(), ${account.userId}, ${organizationId}, 'active', ${invitedBy})
-      ON CONFLICT (user_id, organization_id) DO UPDATE SET status = 'active', status_reason = NULL, created_by = EXCLUDED.created_by, updated_at = now()
-      RETURNING id`);
-    const membershipId = String((membership.rows[0] as Row).id);
-    await setOrgRole(tx, membershipId, role);
-    if (inv.team_id && AGENT_ORG_ROLES.includes(role)) {
-      await tx.execute(sql`
-        INSERT INTO orgs.team_members (team_id, membership_id, is_lead)
-        SELECT id, ${membershipId}, ${role === "supervisor"} FROM orgs.teams WHERE id = ${String(inv.team_id)} AND deleted_at IS NULL
-        ON CONFLICT DO NOTHING`);
-    }
+    const membershipId = await addToOrganization(tx, { userId: account.userId, organizationId, role, teamId: (inv.team_id as string) ?? null, addedBy: invitedBy });
     await tx.execute(sql`
       UPDATE orgs.member_invitations SET status = 'accepted', accepted_at = now(), accepted_user_id = ${account.userId}, updated_at = now()
        WHERE id = ${String(inv.id)}`);
@@ -606,6 +594,181 @@ export async function acceptMemberInvitation(token: string, input: AcceptInput, 
     });
     return { email, createdAccount: account.createdAccount, membershipId };
   });
+}
+
+/** Makes someone an active member in one role (again, if they were removed), and puts agents and supervisors in the team given. */
+async function addToOrganization(tx: Tx, input: { userId: string; organizationId: string; role: OrgRole; teamId: string | null; addedBy: string }): Promise<string> {
+  const membership = await tx.execute(sql`
+    INSERT INTO orgs.memberships (id, user_id, organization_id, status, created_by)
+    VALUES (gen_random_uuid(), ${input.userId}, ${input.organizationId}, 'active', ${input.addedBy})
+    ON CONFLICT (user_id, organization_id) DO UPDATE SET status = 'active', status_reason = NULL, created_by = EXCLUDED.created_by, updated_at = now()
+    RETURNING id`);
+  const membershipId = String((membership.rows[0] as Row).id);
+  await setOrgRole(tx, membershipId, input.role);
+  if (input.teamId && AGENT_ORG_ROLES.includes(input.role)) {
+    await tx.execute(sql`
+      INSERT INTO orgs.team_members (team_id, membership_id, is_lead)
+      SELECT id, ${membershipId}, ${input.role === "supervisor"} FROM orgs.teams
+       WHERE id = ${input.teamId} AND organization_id = ${input.organizationId} AND deleted_at IS NULL
+      ON CONFLICT DO NOTHING`);
+  }
+  return membershipId;
+}
+
+// ── Requests to join ─────────────────────────────────────────────────────────
+//
+// An agent can apply to join an organization by its ORG- reference. The request goes to that
+// organization's Owners and Managers, not to Trustbrick: they know whether the person works there,
+// and they vouch for them as they do for the people they invite.
+
+export type JoinRequestRow = {
+  agentReferenceId: string;
+  userReferenceId: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string | null;
+  reraAgentNumber: string | null;
+  experienceYears: number | null;
+  bio: string | null;
+  submittedAt: string;
+};
+
+const joinRequestsOf = (organizationId: string) =>
+  sql`ap.status = 'pending' AND ap.application_type = 'join_organization' AND ap.requested_organization_id = ${organizationId}`;
+
+/** Agents waiting to join this organization, oldest first. */
+export async function listJoinRequests(actor: Actor): Promise<JoinRequestRow[]> {
+  assertCan(actor, "members.manage", "org");
+  if (!inOrganization(actor)) throw new AppError("FORBIDDEN");
+  const { rows } = await db.execute(sql`
+    SELECT ap.reference_id, u.reference_id AS user_reference_id, u.name, u.email, ap.phone, ap.rera_agent_number, ap.experience_years, ap.bio,
+           coalesce(ap.status_changed_at, ap.created_at) AS submitted_at, city.name AS city
+      FROM orgs.agent_profiles ap
+      JOIN identity.users u ON u.id = ap.user_id
+      LEFT JOIN geography.places city ON city.id = ap.city_place_id
+     WHERE ${joinRequestsOf(actor.organization.id)}
+     ORDER BY submitted_at`);
+  return (rows as Row[]).map((r) => ({
+    agentReferenceId: String(r.reference_id),
+    userReferenceId: String(r.user_reference_id),
+    name: String(r.name),
+    email: String(r.email),
+    phone: String(r.phone),
+    city: (r.city as string) ?? null,
+    reraAgentNumber: (r.rera_agent_number as string) ?? null,
+    experienceYears: r.experience_years === null ? null : Number(r.experience_years),
+    bio: (r.bio as string) ?? null,
+    submittedAt: iso(r.submitted_at)!,
+  }));
+}
+
+type LockedRequest = { profileId: string; userId: string; agentReferenceId: string; userReferenceId: string; name: string; email: string };
+
+async function lockJoinRequest(tx: Tx, actor: Actor, agentReferenceId: string): Promise<LockedRequest> {
+  if (!isReferenceId(agentReferenceId, "AGT")) throw notFound();
+  const { rows } = await tx.execute(sql`
+    SELECT ap.id, ap.user_id, ap.reference_id, u.reference_id AS user_reference_id, u.name, u.email
+      FROM orgs.agent_profiles ap JOIN identity.users u ON u.id = ap.user_id
+     WHERE ap.reference_id = ${agentReferenceId} AND ${joinRequestsOf(actor.organization.id)}
+       FOR UPDATE OF ap`);
+  const r = rows[0] as Row | undefined;
+  if (!r) throw notFound("This request has already been decided, or was withdrawn.");
+  return {
+    profileId: String(r.id),
+    userId: String(r.user_id),
+    agentReferenceId: String(r.reference_id),
+    userReferenceId: String(r.user_reference_id),
+    name: String(r.name),
+    email: String(r.email),
+  };
+}
+
+export const joinApprovalSchema = z.object({
+  role: z.enum(ORG_ROLES, { message: "Choose a role" }).catch("agent"),
+  teamId: z.preprocess(blank, z.uuid().optional()),
+});
+
+/**
+ * Accepts someone's request to join: their agent profile goes live (unverified: verification is
+ * Trustbrick's), and they join in the role given. Earlier requests may still have a Trustbrick
+ * review case open; it's closed with the decision.
+ */
+export async function approveJoinRequest(actor: Actor, agentReferenceId: string, raw: unknown, ctx: RequestContext): Promise<{ userReferenceId: string }> {
+  assertCan(actor, "members.manage", "org");
+  if (!inOrganization(actor)) throw new AppError("FORBIDDEN");
+  const parsed = joinApprovalSchema.safeParse(raw);
+  if (!parsed.success) throw invalid("Please check the highlighted fields.", fieldErrorsFrom(parsed.error));
+  const { role, teamId } = parsed.data;
+  if (!rolesYouCanGive(actor).includes(role)) throw new AppError("FORBIDDEN", "Only an Owner can make someone a Manager or an Owner.");
+  const org = actor.organization;
+
+  let request!: LockedRequest;
+  await db.transaction(async (tx) => {
+    request = await lockJoinRequest(tx, actor, agentReferenceId);
+    if (teamId) {
+      const team = await tx.execute(sql`SELECT 1 FROM orgs.teams WHERE id = ${teamId} AND organization_id = ${org.id} AND deleted_at IS NULL`);
+      if (!team.rows[0]) throw invalid("Choose one of your teams.", { teamId: "Choose one of your teams" });
+    }
+    await tx.execute(sql`
+      UPDATE orgs.agent_profiles SET status = 'active', verification_status = 'unverified', status_reason = NULL, status_changed_at = now(),
+             approved_by = ${actor.userId}, approved_at = now(), updated_at = now()
+       WHERE id = ${request.profileId}`);
+    await tx.execute(sql`
+      UPDATE trust.review_cases SET status = 'approved', decided_by = ${actor.userId}, decided_at = now(), updated_at = now()
+       WHERE agent_profile_id = ${request.profileId} AND status IN ('open', 'in_review')`);
+    const membershipId = await addToOrganization(tx, { userId: request.userId, organizationId: org.id, role, teamId: teamId ?? null, addedBy: actor.userId });
+    await audit(
+      tx,
+      actor,
+      { event: "AGENT_APPROVED", target: { type: "agent", id: request.profileId, referenceId: request.agentReferenceId }, organizationId: org.id, before: { status: "pending" }, after: { status: "active" }, metadata: { joinRequest: true } },
+      ctx,
+    );
+    await audit(
+      tx,
+      actor,
+      { event: "MEMBER_JOINED", target: { type: "membership", id: membershipId, referenceId: request.userReferenceId }, organizationId: org.id, after: { role }, metadata: { joinRequest: request.agentReferenceId } },
+      ctx,
+    );
+    await notify(tx, [request.userId], { type: "agent_decision", title: `You've joined ${org.name}`, body: `As ${withArticle(role)}.`, link: "/dashboard" });
+  });
+
+  void sendEmail(
+    agentApprovedMessage(request.email, { name: request.name, organization: { name: org.name, referenceId: org.referenceId, isNew: false }, url: link("/dashboard") }),
+  ).catch((e) => log.error("email.join_approved_failed", { error: String(e) }));
+  return { userReferenceId: request.userReferenceId };
+}
+
+/** Turns down someone's request to join, with a reason they're told. They can apply again. */
+export async function declineJoinRequest(actor: Actor, agentReferenceId: string, rawReason: unknown, ctx: RequestContext) {
+  assertCan(actor, "members.manage", "org");
+  if (!inOrganization(actor)) throw new AppError("FORBIDDEN");
+  const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+  if (reason.length < 10) throw invalid("Give a reason of at least 10 characters.", { reason: "Give a reason of at least 10 characters: they'll see it" });
+  if (reason.length > 1000) throw invalid("Keep the reason under 1,000 characters.", { reason: "Keep it under 1,000 characters" });
+  const org = actor.organization;
+
+  let request!: LockedRequest;
+  await db.transaction(async (tx) => {
+    request = await lockJoinRequest(tx, actor, agentReferenceId);
+    await tx.execute(sql`
+      UPDATE orgs.agent_profiles SET status = 'rejected', verification_status = 'unverified', status_reason = ${reason}, status_changed_at = now(), updated_at = now()
+       WHERE id = ${request.profileId}`);
+    await tx.execute(sql`
+      UPDATE trust.review_cases SET status = 'rejected', decided_by = ${actor.userId}, decided_at = now(), decision_reason = ${reason}, updated_at = now()
+       WHERE agent_profile_id = ${request.profileId} AND status IN ('open', 'in_review')`);
+    await audit(
+      tx,
+      actor,
+      { event: "AGENT_REJECTED", target: { type: "agent", id: request.profileId, referenceId: request.agentReferenceId }, organizationId: org.id, before: { status: "pending" }, after: { status: "rejected" }, metadata: { reason, joinRequest: true } },
+      ctx,
+    );
+    await notify(tx, [request.userId], { type: "agent_decision", title: `${org.name} didn't accept your request to join`, body: reason, link: "/become-an-agent" });
+  });
+
+  void sendEmail(joinRequestDeclinedMessage(request.email, { name: request.name, organization: org.name, reason, url: link("/become-an-agent") })).catch((e) =>
+    log.error("email.join_declined_failed", { error: String(e) }),
+  );
 }
 
 // ── Changing and removing ────────────────────────────────────────────────────

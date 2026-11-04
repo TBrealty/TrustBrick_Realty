@@ -18,6 +18,7 @@ export const NOTIFICATION_TYPES = {
   agent_decision: "Your agent application is decided",
   agent_invite_accepted: "An agent you invited has accepted",
   member_joined: "Someone you invited joins your organization",
+  join_request: "An agent asks to join your organization",
   membership_changed: "Your role or team in an organization changes, or you're removed from one",
   lead_assigned: "A lead is given to you",
   listing_submitted: "A listing is waiting for review",
@@ -80,6 +81,18 @@ export async function notifyPermissionHolders(tx: DbOrTx, permission: Permission
          OR EXISTS (SELECT 1 FROM orgs.membership_permissions mp WHERE mp.membership_id = m.id AND mp.permission_code = ${permission}))`);
   const ids = (rows as { user_id: string }[]).map((r) => r.user_id).filter((id) => id !== exceptUserId);
   await notify(tx, ids, input);
+}
+
+/** Notify the people who manage an organization's members (its Owners and Managers). */
+export async function notifyOrganizationManagers(tx: DbOrTx, organizationId: string, input: NotificationInput) {
+  const { rows } = await tx.execute(sql`
+    SELECT DISTINCT m.user_id
+      FROM orgs.memberships m
+      JOIN identity.users u ON u.id = m.user_id AND u.status = 'active'
+      JOIN orgs.membership_roles mr ON mr.membership_id = m.id
+      JOIN orgs.role_permissions rp ON rp.role_id = mr.role_id AND rp.permission_code = 'members.manage'
+     WHERE m.organization_id = ${organizationId} AND m.status = 'active'`);
+  await notify(tx, (rows as { user_id: string }[]).map((r) => r.user_id), input);
 }
 
 export async function listNotifications(userId: string, limit = 50) {

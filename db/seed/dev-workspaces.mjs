@@ -174,10 +174,11 @@ try {
   async function agentProfile(userId, { phone, rera, citySlug, years, status, verification, requestedOrg = null, reason = null, bio = null }) {
     return one(
       `INSERT INTO orgs.agent_profiles (id, user_id, phone, rera_agent_number, city_place_id, experience_years, bio, status, verification_status,
-                                        status_reason, requested_organization_id, approved_by, approved_at, status_changed_at, created_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13) RETURNING id, reference_id`,
+                                        status_reason, requested_organization_id, application_type, approved_by, approved_at, status_changed_at, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $14, $11, $12, now(), $13) RETURNING id, reference_id`,
       [userId, phone, rera, city[citySlug], years, bio, status, verification, reason, requestedOrg,
-       status === "pending" ? null : id.opsAdmin, status === "pending" ? null : ago(40), ago(status === "pending" ? 1 : 45)],
+       status === "pending" ? null : id.opsAdmin, status === "pending" ? null : ago(40), ago(status === "pending" ? 1 : 45),
+       requestedOrg ? "join_organization" : "independent"],
     );
   }
   const agent = {};
@@ -214,9 +215,8 @@ try {
   const team = await one(`INSERT INTO orgs.teams (id, organization_id, name) VALUES (gen_random_uuid(), $1, 'Hyderabad West') RETURNING id`, [org.skyline.id]);
   await q(`INSERT INTO orgs.team_members (team_id, membership_id, is_lead) VALUES ($1, $2, true), ($1, $3, false)`, [team.id, m.teamLead, m.agent]);
 
-  // Open review cases for the pending application and the pending organization.
-  await q(`INSERT INTO trust.review_cases (id, case_type, agent_profile_id, status, submitted_by, created_at) VALUES (gen_random_uuid(), 'agent_application', $1, 'open', $2, $3)`,
-    [agent.applicant.id, id.applicant, ago(1)]);
+  // The pending applicant asked to join Skyline: Skyline's Owners and Managers decide, so there's no review case.
+  // An open review case for the pending organization.
   await q(`INSERT INTO trust.review_cases (id, case_type, organization_id, status, submitted_by, created_at) VALUES (gen_random_uuid(), 'organization_verification', $1, 'open', $2, $3)`,
     [org.crestline.id, id.opsAdmin, ago(2)]);
 

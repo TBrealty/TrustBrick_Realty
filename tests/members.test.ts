@@ -7,6 +7,7 @@ import { loadActor } from "@/lib/authz/actor";
 import type { Actor } from "@/lib/authz/actor";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
+import { applyAsAgent } from "@/lib/services/agents";
 import { canAcceptTerms } from "@/lib/services/commission";
 import { createEnquiry, getLead, listLeads } from "@/lib/services/crm";
 import { professionalDashboard } from "@/lib/services/dashboard";
@@ -14,11 +15,14 @@ import { getListingForActor } from "@/lib/services/listings/queries";
 import { transitionListing } from "@/lib/services/listings/lifecycle";
 import {
   acceptMemberInvitation,
+  approveJoinRequest,
   assignLead,
   changeMemberRole,
   createTeam,
+  declineJoinRequest,
   getMember,
   inviteMember,
+  listJoinRequests,
   listMemberInvitations,
   listMembers,
   listTeams,
@@ -29,7 +33,7 @@ import {
 } from "@/lib/services/members";
 import { canManagePartnerSubscription } from "@/lib/services/subscriptions";
 import { resolveRange } from "@/lib/range";
-import { actorFor, ctx, makeAdmin, makeAgent, makeOrg, makeSession, makeUser, one } from "./support/factory";
+import { actorFor, ctx, makeAdmin, makeAgent, makeOrg, makeSession, makeUser, one, person } from "./support/factory";
 import { readyRentListing } from "./support/listings";
 
 const code = (p: Promise<unknown>) => p.then(() => "OK").catch((e: unknown) => (e instanceof AppError ? e.code : `THREW ${String(e)}`));
@@ -248,5 +252,52 @@ describe("removing people", () => {
     const member = await join(owner, "operator");
     expect(await code(getMember(outsider, member.userReferenceId))).toBe("NOT_FOUND");
     expect(await code(removeMember(outsider, member.userReferenceId, {}, ctx))).toBe("NOT_FOUND");
+  });
+});
+
+describe("requests to join", () => {
+  /** Applies to join the test organization with its ORG- reference, as a new person. */
+  async function askToJoin(name: string) {
+    const org = await one<{ reference_id: string }>(sql`SELECT reference_id FROM orgs.organizations WHERE id = ${orgId}`);
+    const city = await one<{ id: string }>(sql`SELECT id FROM geography.places WHERE slug = 'hyderabad'`);
+    const applicant = await makeUser(name);
+    const { referenceId } = await applyAsAgent(
+      person(applicant),
+      { phone: "9876512345", cityId: city.id, applyingAs: "join_organization", organizationReference: org.reference_id },
+      ctx,
+    );
+    return { applicant, referenceId };
+  }
+
+  it("go to the organization's Owners and Managers, not to Trustbrick", async () => {
+    const { applicant, referenceId } = await askToJoin("Joining Agent");
+    const cases = await one<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM trust.review_cases rc JOIN orgs.agent_profiles ap ON ap.id = rc.agent_profile_id WHERE ap.reference_id = ${referenceId}`);
+    expect(cases.n).toBe(0);
+    expect((await listJoinRequests(owner)).some((r) => r.agentReferenceId === referenceId)).toBe(true);
+
+    const agent = await (await join(owner, "agent")).actor();
+    expect(await code(approveJoinRequest(agent, referenceId, {}, ctx))).toBe("FORBIDDEN");
+    const outsider = await (await makeAgent((await makeOrg("Not Their Realty")).id, "Other Owner", "owner")).actor();
+    expect(await code(approveJoinRequest(outsider, referenceId, {}, ctx))).toBe("NOT_FOUND");
+    const manager = await (await join(owner, "manager")).actor();
+    expect(await code(approveJoinRequest(manager, referenceId, { role: "owner" }, ctx))).toBe("FORBIDDEN");
+
+    await approveJoinRequest(manager, referenceId, { role: "agent" }, ctx);
+    const joined = await actorFor(applicant.id);
+    expect(joined.organization.id).toBe(orgId);
+    expect(joined.roles).toEqual(["agent"]);
+    expect(joined.agent).not.toBeNull();
+    expect((await listJoinRequests(owner)).some((r) => r.agentReferenceId === referenceId)).toBe(false);
+    expect(await code(approveJoinRequest(owner, referenceId, {}, ctx))).toBe("NOT_FOUND");
+  });
+
+  it("a declined request tells the applicant why, and they can apply again", async () => {
+    const { applicant, referenceId } = await askToJoin("Unknown Agent");
+    expect(await code(declineJoinRequest(owner, referenceId, "No.", ctx))).toBe("VALIDATION_ERROR");
+    await declineJoinRequest(owner, referenceId, "We don't have an agent by this name.", ctx);
+    const profile = await one<{ status: string; status_reason: string }>(sql`SELECT status, status_reason FROM orgs.agent_profiles WHERE user_id = ${applicant.id}`);
+    expect(profile).toEqual({ status: "rejected", status_reason: "We don't have an agent by this name." });
+    expect(await code(actorFor(applicant.id))).not.toBe("OK");
   });
 });

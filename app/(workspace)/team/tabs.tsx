@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/authz/actor";
 import { canManageMembers } from "@/lib/services/members";
 
 /** The header every Team page shares: the organization, the way to add people, and the tabs. */
-export function TeamHeader({ actor, active, counts }: { actor: Actor; active: "people" | "teams" | "invitations"; counts?: { people?: number; teams?: number; invitations?: number } }) {
+export function TeamHeader({ actor, active, counts }: { actor: Actor; active: "people" | "teams" | "requests" | "invitations"; counts?: { people?: number; teams?: number; requests?: number; invitations?: number } }) {
   const manages = canManageMembers(actor);
   return (
     <>
@@ -28,7 +28,12 @@ export function TeamHeader({ actor, active, counts }: { actor: Actor; active: "p
         items={[
           { href: "/team", label: "People", count: counts?.people, active: active === "people" },
           { href: "/team/teams", label: "Teams", count: counts?.teams, active: active === "teams" },
-          ...(manages ? [{ href: "/team/invitations", label: "Invitations", count: counts?.invitations, active: active === "invitations" }] : []),
+          ...(manages
+            ? [
+                { href: "/team/requests", label: "Requests to join", count: counts?.requests, active: active === "requests" },
+                { href: "/team/invitations", label: "Invitations", count: counts?.invitations, active: active === "invitations" },
+              ]
+            : []),
         ]}
       />
     </>

@@ -6,7 +6,7 @@ import { Lines } from "@/components/typography/Lines";
 const STEPS = [
   {
     title: "Approved agents and hosts",
-    body: "Agents, brokerages and hosts apply to join. Our team reviews every application, and organizations give their GST and company details, before anyone can list.",
+    body: "Agents, brokerages and hosts apply to join, and our team reviews them before anyone can list. Organizations give their GST and company details, and answer for the people they add.",
   },
   {
     title: "Every listing reviewed",

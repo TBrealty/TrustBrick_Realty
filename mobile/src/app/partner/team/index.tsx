@@ -4,7 +4,7 @@ import { Stack, router } from "expo-router";
 import { useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { ApiError, api } from "@/api/client";
-import type { MemberInvitationRow, MemberRow, MembersResponse, TeamRow } from "@/api/workspace-types";
+import type { JoinRequestRow, MemberInvitationRow, MemberRow, MembersResponse, OrgRole, TeamRow } from "@/api/workspace-types";
 import { useSession } from "@/auth/session";
 import { confirm } from "@/confirm";
 import { PressableScale } from "@/components/motion";
@@ -12,7 +12,7 @@ import { Badge, Button, Chip, EmptyState, ErrorState, Field, Loading, Notice, Sm
 import { relativeTime } from "@/lib/format";
 import { fonts, radius, useColors } from "@/theme";
 
-type Tab = "people" | "teams" | "invitations";
+type Tab = "people" | "teams" | "requests" | "invitations";
 
 /**
  * The organization's people, as the website's Team pages. Owners and Managers add people, arrange
@@ -54,6 +54,7 @@ export default function Team() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}>
               <Chip label={`People · ${d!.members.length}`} selected={tab === "people"} onPress={() => setTab("people")} />
               <Chip label={`Teams · ${d!.teams.length}`} selected={tab === "teams"} onPress={() => setTab("teams")} />
+              {manages && <Chip label={`Requests${d!.requests.length ? ` · ${d!.requests.length}` : ""}`} selected={tab === "requests"} onPress={() => setTab("requests")} />}
               {manages && <Chip label={`Invitations${pending ? ` · ${pending}` : ""}`} selected={tab === "invitations"} onPress={() => setTab("invitations")} />}
             </ScrollView>
           </View>
@@ -74,6 +75,7 @@ export default function Team() {
             />
           )}
           {tab === "teams" && <Teams teams={d!.teams} manages={manages} refreshing={data.isRefetching} onRefresh={() => data.refetch()} />}
+          {tab === "requests" && <Requests data={d!} refreshing={data.isRefetching} onRefresh={() => data.refetch()} />}
           {tab === "invitations" && <Invitations invitations={d!.invitations} refreshing={data.isRefetching} onRefresh={() => data.refetch()} />}
         </>
       )}
@@ -204,5 +206,71 @@ function Invitations({ invitations, refreshing, onRefresh }: { invitations: Memb
       )}
       ListEmptyComponent={<EmptyState icon="mail-outline" title="No invitations in the last 30 days">Add someone with the button at the top: they get an email to join.</EmptyState>}
     />
+  );
+}
+
+/** Agents asking to join with the organization's reference. Approve in a role, or decline with a reason they're told. */
+function Requests({ data, refreshing, onRefresh }: { data: MembersResponse; refreshing: boolean; onRefresh: () => void }) {
+  const c = useColors();
+  return (
+    <FlatList
+      data={data.requests}
+      keyExtractor={(r) => r.agentReferenceId}
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 40, flexGrow: 1 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.brick} />}
+      ListHeaderComponent={<Small>Approve only people who work with you: they get into your workspace straight away.</Small>}
+      renderItem={({ item }) => <RequestCard request={item} data={data} />}
+      ListEmptyComponent={<EmptyState icon="person-add-outline" title="No requests waiting">When an agent asks to join with your organization&apos;s reference, it appears here.</EmptyState>}
+    />
+  );
+}
+
+function RequestCard({ request: r, data }: { request: JoinRequestRow; data: MembersResponse }) {
+  const c = useColors();
+  const queryClient = useQueryClient();
+  const [role, setRole] = useState<OrgRole>("agent");
+  const [declining, setDeclining] = useState(false);
+  const [reason, setReason] = useState("");
+  const done = () => queryClient.invalidateQueries({ queryKey: ["partner-members"] });
+  const approve = useMutation({ mutationFn: () => api(`/partner/members/requests/${r.agentReferenceId}/approve`, { method: "POST", body: { role } }), onSuccess: done });
+  const decline = useMutation({ mutationFn: () => api(`/partner/members/requests/${r.agentReferenceId}/decline`, { method: "POST", body: { reason } }), onSuccess: done });
+  const declineError = decline.error instanceof ApiError ? decline.error : null;
+  const roles = data.roles.filter((x) => data.manage?.roles.includes(x.code));
+  return (
+    <View style={{ gap: 8, padding: 14, borderRadius: radius.xl, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line }}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: c.text }}>{r.name}</Text>
+      <Small>
+        {r.email} · {r.phone}
+      </Small>
+      <Small>
+        {[r.city, r.experienceYears !== null ? `${r.experienceYears} years` : null, r.reraAgentNumber ? `RERA ${r.reraAgentNumber}` : null, `asked ${relativeTime(r.submittedAt)}`]
+          .filter(Boolean)
+          .join(" · ")}
+      </Small>
+      {r.bio ? <Small>“{r.bio}”</Small> : null}
+      {declining ? (
+        <>
+          <Field label="Reason (they'll see it)" value={reason} onChangeText={setReason} multiline placeholder="e.g. We don't have an agent by this name." error={declineError?.fieldErrors?.reason} />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button label="Decline" variant="danger" compact disabled={reason.trim().length < 10} loading={decline.isPending} onPress={() => decline.mutate()} />
+            <Button label="Back" variant="ghost" compact onPress={() => setDeclining(false)} />
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {roles.map((x) => (
+              <Chip key={x.code} label={x.name} selected={role === x.code} onPress={() => setRole(x.code)} />
+            ))}
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button label={`Approve as ${data.roles.find((x) => x.code === role)?.name ?? role}`} compact loading={approve.isPending} onPress={() => approve.mutate()} />
+            <Button label="Decline" variant="secondary" compact onPress={() => setDeclining(true)} />
+          </View>
+        </>
+      )}
+      {approve.isError && <Notice>{(approve.error as Error).message}</Notice>}
+      {decline.isError && !declineError?.fieldErrors && <Notice>{(decline.error as Error).message}</Notice>}
+    </View>
   );
 }

@@ -26,7 +26,7 @@ type NavDef = {
 };
 type SectionDef = { label?: string; items: NavDef[] };
 
-type BadgeKey = "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue" | "pendingSubscriptions";
+type BadgeKey = "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue" | "pendingSubscriptions" | "joinRequests";
 
 const scopeLabel = (actor: Actor, own: string, team: string, org: string) => {
   const s = actor.permissions["listings.view"];
@@ -92,7 +92,7 @@ const SECTIONS: SectionDef[] = [
   },
   {
     label: "Team",
-    items: [{ label: (a) => (a.permissions["members.view"] === "team" ? "My team" : "People"), href: "/team", icon: "users", permission: "members.view", atLeast: "team", workspace: "professional" }],
+    items: [{ label: (a) => (a.permissions["members.view"] === "team" ? "My team" : "People"), href: "/team", icon: "users", permission: "members.view", atLeast: "team", workspace: "professional", badge: "joinRequests" }],
   },
   {
     label: "Insights",
@@ -160,7 +160,12 @@ async function badgeCounts(actor: Actor, wanted: Set<BadgeKey>): Promise<Partial
     parts.push(sql`(SELECT count(*) FROM trust.review_cases WHERE status IN ('open', 'in_review') AND case_type = ANY(${sql.param(types)}::text[]))::int AS "reviewQueue"`);
   }
   if (wanted.has("openReports")) parts.push(sql`(SELECT count(*) FROM trust.reports WHERE status = 'open')::int AS "openReports"`);
-  if (wanted.has("pendingAgents")) parts.push(sql`(SELECT count(*) FROM orgs.agent_profiles WHERE status = 'pending')::int AS "pendingAgents"`);
+  // Requests to join an organization are that organization's to decide, not Trustbrick's.
+  if (wanted.has("pendingAgents")) parts.push(sql`(SELECT count(*) FROM orgs.agent_profiles WHERE status = 'pending' AND application_type <> 'join_organization')::int AS "pendingAgents"`);
+  if (wanted.has("joinRequests") && can(actor, "members.manage", "org")) {
+    parts.push(sql`(SELECT count(*) FROM orgs.agent_profiles
+                     WHERE status = 'pending' AND application_type = 'join_organization' AND requested_organization_id = ${actor.organization.id})::int AS "joinRequests"`);
+  }
   if (wanted.has("pendingOrganizations")) parts.push(sql`(SELECT count(*) FROM orgs.organizations WHERE status = 'pending')::int AS "pendingOrganizations"`);
   if (wanted.has("attention")) {
     parts.push(sql`(SELECT count(*) FROM marketplace.listings l WHERE l.deleted_at IS NULL AND l.status IN ('changes_requested', 'rejected')
@@ -189,6 +194,7 @@ async function badgeCounts(actor: Actor, wanted: Set<BadgeKey>): Promise<Partial
   if (wanted.has("pendingSubscriptions")) parts.push(sql`(SELECT count(*) FROM finance.subscriptions WHERE status = 'pending_payment')::int AS "pendingSubscriptions"`);
   if (wanted.has("newLegalRequests")) parts.push(sql`(SELECT count(*) FROM platform.legal_requests WHERE status = 'new')::int AS "newLegalRequests"`);
   if (wanted.has("pendingHosts")) parts.push(sql`(SELECT count(*) FROM stays.host_profiles WHERE status = 'pending')::int AS "pendingHosts"`);
+  if (parts.length === 0) return {};
   const { rows } = await db.execute(sql`SELECT ${sql.join(parts, sql`, `)}`);
   return rows[0] as Partial<Record<BadgeKey, number>>;
 }

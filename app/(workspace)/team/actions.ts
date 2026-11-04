@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { formObject, runAction, text } from "@/lib/actions";
 import type { ActionResult } from "@/lib/errors";
 import {
+  approveJoinRequest,
   changeMemberRole,
+  declineJoinRequest,
   createTeam,
   deleteTeam,
   inviteMember,
@@ -39,6 +41,19 @@ export async function removeMemberAction(_p: Result | null, form: FormData): Pro
   const ref = text(form, "ref");
   const r = await runAction("member.remove", (a, ctx) => removeMember(a, ref, formObject(form), ctx), { revalidate: paths(ref) });
   if (r.ok) redirect("/team?removed=1");
+  return r;
+}
+
+export async function approveJoinAction(_p: Result | null, form: FormData): Promise<Result> {
+  const r = await runAction("member.join.approve", (a, ctx) => approveJoinRequest(a, text(form, "ref"), formObject(form), ctx), { revalidate: [...paths(), "/team/requests"] });
+  // Their request card is gone: open their page, where their role and teams can be adjusted.
+  if (r.ok) redirect(`/team/${(r.data as { userReferenceId: string }).userReferenceId}?joined=1`);
+  return r;
+}
+
+export async function declineJoinAction(_p: Result | null, form: FormData): Promise<Result> {
+  const r = await runAction("member.join.decline", (a, ctx) => declineJoinRequest(a, text(form, "ref"), text(form, "reason"), ctx), { revalidate: ["/team/requests"] });
+  if (r.ok) redirect("/team/requests?declined=1");
   return r;
 }
 

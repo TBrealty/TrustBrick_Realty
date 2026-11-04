@@ -127,6 +127,22 @@ export function memberInvitationMessage(
   };
 }
 
+/** An organization turned down someone's request to join it. */
+export function joinRequestDeclinedMessage(to: string, input: { name: string; organization: string; reason: string; url: string }): EmailMessage {
+  const first = input.name.split(" ")[0] || "there";
+  const lines = [
+    `${input.organization} didn't accept your request to join it on ${brand}.`,
+    `Their reason: "${input.reason}"`,
+    "If you think this is a mistake, talk to them first. You can apply again, to them or on your own, from the same page.",
+  ];
+  return {
+    to,
+    subject: `Your request to join ${input.organization}`,
+    text: `Hi ${first},\n\n${lines.join("\n\n")}\n\n${input.url}`,
+    html: layout(`About your request, ${escape(first)}`, lines.map(escape), { label: "Apply again", url: input.url }),
+  };
+}
+
 /** Someone's role in an organization changed, or they were removed from it. */
 export function membershipChangedMessage(
   to: string,

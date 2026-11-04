@@ -320,11 +320,26 @@ export type MemberInvitationRow = {
   canRevoke: boolean;
 };
 
+export type JoinRequestRow = {
+  agentReferenceId: string;
+  userReferenceId: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string | null;
+  reraAgentNumber: string | null;
+  experienceYears: number | null;
+  bio: string | null;
+  submittedAt: string;
+};
+
 export type MembersResponse = {
   organization: string;
   members: MemberRow[];
   teams: TeamRow[];
   invitations: MemberInvitationRow[];
+  /** Agents asking to join with the organization's reference (Owners and Managers only). */
+  requests: JoinRequestRow[];
   /** Set for Owners and Managers: the roles they may give. */
   manage: { roles: OrgRole[] } | null;
   roles: { code: OrgRole; name: string; description: string; agent: boolean }[];

@@ -11,14 +11,15 @@ import { formatDateTime } from "@/lib/format";
 import { canViewMembers, getMember } from "@/lib/services/members";
 import { changeMemberRoleAction, removeMemberAction } from "../actions";
 
-type Props = { params: Promise<{ ref: string }> };
+type Props = { params: Promise<{ ref: string }>; searchParams: Promise<{ joined?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: (await params).ref };
 }
 
-export default async function MemberPage({ params }: Props) {
+export default async function MemberPage({ params, searchParams }: Props) {
   const { ref } = await params;
+  const { joined } = await searchParams;
   const actor = await requirePermission("members.view", `/team/${ref}`, "team");
   if (!canViewMembers(actor)) notFound();
   const member = await getMember(actor, ref).catch((e) => {
@@ -50,6 +51,11 @@ export default async function MemberPage({ params }: Props) {
           ) : undefined
         }
       />
+      {joined && (
+        <p role="status" className="mb-5 rounded-[3px] border-l-2 border-sage bg-sage/10 px-3.5 py-2.5 text-[0.8125rem] text-sage">
+          Approved. {member.name} is in {actor.organization.name} and has been told by email.
+        </p>
+      )}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Listings" value={member.listings} />
         <StatCard label="Open leads" value={member.openLeads} />

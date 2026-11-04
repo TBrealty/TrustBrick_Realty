@@ -18,7 +18,7 @@ import { APPLICANT_ORG_TYPES } from "@/lib/organizations/terms";
 import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { type PersonActor, type RequestContext, audit } from "./audit";
 import { HOLD_REASONS, pauseListings, resumeListings } from "./listings/lifecycle";
-import { notify, notifyPermissionHolders } from "./notifications";
+import { notify, notifyOrganizationManagers, notifyPermissionHolders } from "./notifications";
 import { slugify } from "./organizations";
 import { type Page, pageParams } from "./pagination";
 import { getSetting } from "./settings";
@@ -34,7 +34,8 @@ const link = (path: string) => new URL(path, env.BETTER_AUTH_URL).toString();
 // Three ways to apply: on your own, to join an organization already on Trustbrick (by its ORG-
 // reference), or registering a new organization (name, kind, GSTIN, address…). A new
 // organization is created pending and goes live when its applicant is approved; the applicant
-// becomes its admin. Signed-in people apply from /become-an-agent; people signing up as an agent
+// becomes its Owner. Trustbrick reviews the first and the last; a request to join an organization
+// goes to that organization's Owners and Managers, who vouch for their people (members.ts). Signed-in people apply from /become-an-agent; people signing up as an agent
 // apply as part of signing up, and the application is sent once they confirm their email.
 
 export const phone = z
@@ -104,13 +105,29 @@ export function parseAgentApplication(raw: unknown): AgentApplication {
 
 export type AgentApplicationState =
   | { state: "none" }
-  | { state: "pending" | "active" | "suspended" | "rejected"; referenceId: string; reason: string | null; submittedAt: string };
+  | {
+      state: "pending" | "active" | "suspended" | "rejected";
+      referenceId: string;
+      reason: string | null;
+      submittedAt: string;
+      /** A request to join an organization: it decides, not Trustbrick. */
+      joining: string | null;
+    };
 
 export async function agentApplicationFor(userId: string): Promise<AgentApplicationState> {
-  const { rows } = await db.execute(sql`SELECT reference_id, status, status_reason, created_at FROM orgs.agent_profiles WHERE user_id = ${userId}`);
+  const { rows } = await db.execute(sql`
+    SELECT ap.reference_id, ap.status, ap.status_reason, ap.created_at, ap.application_type, o.name AS organization
+      FROM orgs.agent_profiles ap LEFT JOIN orgs.organizations o ON o.id = ap.requested_organization_id
+     WHERE ap.user_id = ${userId}`);
   const r = rows[0] as Row | undefined;
   if (!r) return { state: "none" };
-  return { state: r.status as "pending", referenceId: String(r.reference_id), reason: (r.status_reason as string) ?? null, submittedAt: iso(r.created_at)! };
+  return {
+    state: r.status as "pending",
+    referenceId: String(r.reference_id),
+    reason: (r.status_reason as string) ?? null,
+    submittedAt: iso(r.created_at)!,
+    joining: r.application_type === "join_organization" && r.organization ? String(r.organization) : null,
+  };
 }
 
 /** The organization being registered: a new pending one, or the applicant's own earlier one, updated. */
@@ -165,15 +182,18 @@ async function submitApplication(tx: Tx, user: PersonActor, input: AgentApplicat
   if (prior && prior.status !== "rejected") throw conflict("You have already applied. You'll be notified when it's decided.");
 
   let requestedOrg: string | null = null;
+  let joining: { id: string; name: string } | null = null;
   let newOrganization: { id: string; name: string } | null = null;
   if (input.type === "join_organization" && input.organizationReference) {
     const org = await tx.execute(sql`
-      SELECT id FROM orgs.organizations WHERE reference_id = ${input.organizationReference}
+      SELECT id, name FROM orgs.organizations WHERE reference_id = ${input.organizationReference}
          AND status = 'active' AND org_type IN ('brokerage', 'developer', 'property_manager', 'pg_operator') AND deleted_at IS NULL`);
-    if (!org.rows[0]) {
+    const o = org.rows[0] as Row | undefined;
+    if (!o) {
       throw invalid("We couldn't find an active organization with that reference.", { organizationReference: "No active organization has this reference" });
     }
-    requestedOrg = String((org.rows[0] as Row).id);
+    joining = { id: String(o.id), name: String(o.name) };
+    requestedOrg = joining.id;
   } else if (input.type === "new_organization") {
     newOrganization = await applicantOrganization(tx, { userId: user.userId, email: String(a.email) }, input, (prior?.requested_organization_id as string) ?? null);
     requestedOrg = newOrganization.id;
@@ -191,6 +211,18 @@ async function submitApplication(tx: Tx, user: PersonActor, input: AgentApplicat
         VALUES (gen_random_uuid(), ${user.userId}, ${values}) RETURNING id, reference_id`);
   const profile = saved.rows[0] as Row;
   const referenceId = String(profile.reference_id);
+
+  // Joining an organization: its Owners and Managers decide, so nothing goes to Trustbrick's queue.
+  if (joining) {
+    await audit(
+      tx,
+      user,
+      { event: "AGENT_APPLIED", target: { type: "agent", id: String(profile.id), referenceId }, organizationId: joining.id, metadata: { applicationType: input.type, organization: joining.name } },
+      ctx,
+    );
+    await notifyOrganizationManagers(tx, joining.id, { type: "join_request", title: `An agent asks to join ${joining.name}`, body: `Application ${referenceId}`, link: "/team/requests" });
+    return { referenceId };
+  }
 
   const kase = await tx.execute(sql`
     INSERT INTO trust.review_cases (id, case_type, agent_profile_id, status, submitted_by)
@@ -571,7 +603,7 @@ export async function approveAgent(actor: Actor, referenceId: string, options: {
     if (agent.status !== "pending") throw conflict("Only pending applications can be approved.");
     if (agent.userId === actor.userId) throw new AppError("FORBIDDEN", "You can't approve your own application.");
     const verification = options.verify ? "verified" : "unverified";
-    // A new organization goes live with its applicant, who becomes its admin.
+    // A new organization goes live with its applicant, who becomes its Owner.
     const registered = registeredOrganization(agent);
     if (registered) {
       if (registered.status !== "pending") throw conflict(`${registered.name} isn't waiting for approval any more.`);
@@ -595,7 +627,7 @@ export async function approveAgent(actor: Actor, referenceId: string, options: {
       type: "agent_decision",
       title: "Your agent application is approved",
       body: registered
-        ? `${registered.name} is live on Trustbrick and you're its admin. Agents who work with you can apply with its reference, ${registered.referenceId}.`
+        ? `${registered.name} is live on Trustbrick and you're its Owner. Add the people who work with you from Team in your workspace.`
         : "Your agent workspace is ready. Open it from the menu or go to your dashboard.",
       link: "/dashboard",
     });
