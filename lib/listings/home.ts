@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { parseFilters, type ListingKind } from "@/lib/listings/filters";
 import { getBrowseOptions, searchListings } from "@/lib/listings/queries";
 import type { ListingSummary } from "@/lib/listings/types";
@@ -69,8 +70,23 @@ function refresh(): Promise<HomeData> {
   return loading;
 }
 
+const stale = () => !fresh || Date.now() - fresh.at > TTL_MS;
+
+/**
+ * Refreshes once the response has gone, so the refresh never slows the visitor who noticed the
+ * copy was old. Outside a request (tests, scripts) there's no response to wait for.
+ */
+function refreshLater() {
+  const run = () => (stale() ? refresh() : undefined);
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
+
 export function homeData(): Promise<HomeData> {
   if (!fresh) return refresh();
-  if (Date.now() - fresh.at > TTL_MS) void refresh();
+  if (stale()) refreshLater();
   return Promise.resolve(fresh.data);
 }
