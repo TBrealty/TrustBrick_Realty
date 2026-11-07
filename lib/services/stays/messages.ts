@@ -305,7 +305,7 @@ async function stayForMessaging(tx: DbOrTx, listingRef: string): Promise<StayFor
 }
 
 function draftClosedReason(stay: StayForMessaging, userId: string): string | null {
-  if (!stay.hostUserId) return "This is a sample stay without a host, so there's no one to message.";
+  if (!stay.hostUserId) return "This is a sample stay, so there's no one to message.";
   if (stay.hostUserId === userId) return "This is your own stay. Guests' messages arrive in your hosting workspace.";
   if (stay.status !== "published") return "This stay isn't taking new enquiries right now.";
   if (stay.hostStatus !== "active") return "This host isn't available on Trustbrick right now.";

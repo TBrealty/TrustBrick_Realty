@@ -181,7 +181,7 @@ async function priceNights(tx: DbOrTx, stay: Stay, checkIn: string, checkOut: st
 async function computeQuote(tx: DbOrTx, stay: Stay, input: StayRequest, options: { exceptBookingId?: string } = {}): Promise<Quote> {
   const today = todayInIndia();
   if (stay.status !== "published") return { ok: false, message: "This stay isn't taking bookings right now." };
-  if (!stay.hostUserId) return { ok: false, message: "This is a sample stay without a host, so it can't be booked." };
+  if (!stay.hostUserId) return { ok: false, message: "This is a sample stay, so it can't be booked." };
   if (input.checkIn < today) return { ok: false, message: "Check-in can't be in the past.", field: "checkIn" };
   if (daysBetween(today, input.checkIn) > MAX_ADVANCE_DAYS) return { ok: false, message: "You can book up to a year ahead.", field: "checkIn" };
   const nights = daysBetween(input.checkIn, input.checkOut);

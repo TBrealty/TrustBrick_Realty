@@ -37,7 +37,7 @@ export function ListingContact({ referenceId, context, loggedIn, defaultName, mi
   if (!context) {
     return (
       <p className="border border-line-light bg-paper px-4 py-3 text-[0.875rem] text-stone-deep">
-        This is a sample listing without an agent, so it can&apos;t be contacted.
+        This is a sample listing, so there&apos;s no one to contact about it.
       </p>
     );
   }

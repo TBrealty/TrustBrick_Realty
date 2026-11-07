@@ -198,9 +198,9 @@ export async function BrowsePage({
 
         {hasSamples && (
           <p className="mt-6 flex items-start gap-3 border-l-2 border-brick/50 bg-brick/[0.05] px-4 py-3 text-[0.875rem] leading-relaxed text-graphite">
-            <span className="eyebrow mt-0.5 shrink-0 text-brick">Sample data</span>
-            These are sample listings for development. They are not real properties, and the prices, organizations and
-            RERA numbers are illustrative.
+            <span className="eyebrow mt-0.5 shrink-0 text-brick">Sample listings</span>
+            Listings marked Sample show how Trustbrick will look. They aren&apos;t real properties, and their prices,
+            organizations and RERA numbers are for illustration only.
           </p>
         )}
 

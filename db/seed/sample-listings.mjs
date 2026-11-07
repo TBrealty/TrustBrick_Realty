@@ -55,6 +55,15 @@ const int = (min, max) => Math.floor(between(min, max + 1));
 const pick = (list) => list[Math.floor(rand() * list.length)];
 const chance = (p) => rand() < p;
 const roundTo = (value, step) => Math.round(value / step) * step;
+// One photo from each group in turn, never the same photo twice: a listing's gallery, cover first.
+function gallery(...groups) {
+  const out = [];
+  for (const group of groups) {
+    const left = group.filter((key) => !out.includes(key));
+    if (left.length) out.push(pick(left));
+  }
+  return out;
+}
 
 
 // ── Market assumptions per locality (sale ₹/sqft on carpet area) ─────────────
@@ -71,12 +80,33 @@ const DEPOSIT_MONTHS = { hyderabad: 2, bengaluru: 6, pune: 2, mumbai: 3 };
 // PG base rent per bed for a double room.
 const PG_BASE = { hyderabad: 8500, bengaluru: 10000, pune: 9000, mumbai: 13500 };
 
+// Photographs in /public: the site's own, and the sample set in /images/samples (credited in its CREDITS.md).
+const ALT = {
+  living: "Sample photograph: living room", kitchen: "Sample photograph: kitchen", bedroom: "Sample photograph: bedroom",
+  bath: "Sample photograph: bathroom", dining: "Sample photograph: dining area", balcony: "Sample photograph: balcony",
+  building: "Sample photograph: the building", pool: "Sample photograph: swimming pool", house: "Sample photograph: the house",
+  villa: "Sample photograph: the villa", pg: "Sample photograph: a room", office: "Sample photograph: office space",
+  retail: "Sample photograph: shop floor",
+};
+const samples = (name, n) => Array.from({ length: n }, (_, i) => `/images/samples/${name}-${i + 1}.jpg`);
 const IMAGES = {
   interior: ["/images/properties/home-sunlit-interior.jpg"],
   residence: ["/images/properties/residence-dusk.jpg"],
   construction: ["/images/architecture/construction-dusk.jpg"],
   city: ["/images/architecture/city-aerial-dusk.jpg", "/images/hero/hero-skyline-dusk.jpg", "/images/architecture/city-night.jpg"],
   facade: ["/images/architecture/modernist-facade.jpg", "/images/architecture/concrete-curve.jpg"],
+  living: [...samples("living", 6), "/images/properties/home-sunlit-interior.jpg"],
+  kitchen: samples("kitchen", 5),
+  bedroom: samples("bedroom", 5),
+  bath: samples("bath", 3),
+  dining: samples("dining", 3),
+  balcony: samples("balcony", 3),
+  building: [...samples("building", 7), "/images/architecture/modernist-facade.jpg", "/images/architecture/concrete-curve.jpg"],
+  pool: samples("pool", 2),
+  house: [...samples("house", 1), ...samples("villa", 4), "/images/properties/residence-dusk.jpg"],
+  pg: samples("pg", 4),
+  office: samples("office", 4),
+  retail: samples("retail", 3),
 };
 
 const DAY = 86_400_000;
@@ -143,12 +173,12 @@ async function main() {
 
     // Shared image assets: one media row per file, linked to many properties (D8).
     const mediaId = {};
-    for (const key of Object.values(IMAGES).flat()) {
+    for (const key of new Set(Object.values(IMAGES).flat())) {
       const { rows } = await q(
         `INSERT INTO real_estate.media (id, storage_key, storage_provider, media_type, mime_type, alt_text)
-         VALUES ($1, $2, 'public', 'image', 'image/jpeg', 'Sample photograph')
-         ON CONFLICT (storage_key) DO UPDATE SET updated_at = now() RETURNING id`,
-        [uuidv7(), key],
+         VALUES ($1, $2, 'public', 'image', 'image/jpeg', $3)
+         ON CONFLICT (storage_key) DO UPDATE SET updated_at = now(), alt_text = EXCLUDED.alt_text RETURNING id`,
+        [uuidv7(), key, ALT[key.match(/samples\/([a-z]+)-/)?.[1]] ?? "Sample photograph"],
       );
       mediaId[key] = rows[0].id;
     }
@@ -261,7 +291,7 @@ async function main() {
         const unit = `${floor}${String(int(1, 8)).padStart(2, "0")}`;
         const propertyId = await property({
           loc, type: "apartment", org: orgs[orgKey], lifecycle: "under_construction", carpet, projectId, buildingId, floor, totalFloors: 28, unit,
-          images: [pick(IMAGES.construction), pick(IMAGES.facade)], amenities: BUILDING_AMENITIES.slice(0, int(6, 10)),
+          images: gallery(IMAGES.building, IMAGES.living, IMAGES.construction, IMAGES.kitchen, IMAGES.bedroom, ...(chance(0.5) ? [IMAGES.pool] : [])), amenities: BUILDING_AMENITIES.slice(0, int(6, 10)),
         });
         await q(`INSERT INTO real_estate.residential_attributes (property_id, bedrooms, bathrooms, balconies, furnishing, facing, covered_parking) VALUES ($1,$2,$3,$4,'unfurnished',$5,$6)`,
           [propertyId, bhk, bhk, int(1, 3), pick(FACE), bhk >= 3 ? 2 : 1]);
@@ -289,7 +319,9 @@ async function main() {
         loc, type: kind, org: pick([orgs.brokerA, orgs.brokerB]), lifecycle: "ready", carpet, floor,
         totalFloors: kind === "apartment" ? int(floor + 1, 25) : kind === "builder_floor" ? 4 : int(2, 3),
         yearBuilt: int(2008, 2025),
-        images: kind === "apartment" || kind === "builder_floor" ? [pick(IMAGES.interior), pick(IMAGES.facade)] : [pick(IMAGES.residence), pick(IMAGES.interior)],
+        images: kind === "apartment" || kind === "builder_floor"
+          ? gallery(IMAGES.living, IMAGES.building, IMAGES.kitchen, IMAGES.bedroom, IMAGES.bath, chance(0.5) ? IMAGES.balcony : IMAGES.dining)
+          : gallery(IMAGES.house, IMAGES.living, IMAGES.kitchen, IMAGES.bedroom, IMAGES.bath, chance(0.5) ? IMAGES.pool : IMAGES.dining),
         amenities: kind === "apartment" ? someAmenities(BUILDING_AMENITIES, 3, 8) : someAmenities(["covered_parking", "power_backup", "gated_security", "cctv", "modular_kitchen"], 2, 5),
       });
       await q(`INSERT INTO real_estate.residential_attributes (property_id, bedrooms, bathrooms, balconies, furnishing, facing, covered_parking) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -299,7 +331,7 @@ async function main() {
       await listing({
         propertyId, org: pick([orgs.brokerA, orgs.brokerB]), transactionType: "sale",
         title: `${bhk} BHK ${label} in ${loc.name}`,
-        description: `A ready-to-move ${bhk} BHK ${label} in ${loc.name}, ${loc.cityName}. Sample listing for development.`,
+        description: `A ready-to-move ${bhk} BHK ${label} in ${loc.name}, ${loc.cityName}. A sample listing, shown for illustration.`,
         price, negotiable: chance(0.4), maintenance: kind === "apartment" ? roundTo(carpet * between(2.5, 4.5), 100) : null,
         priceDropFrom: chance(0.25) ? roundTo(price * between(1.04, 1.1), 50000) : null,
       });
@@ -318,7 +350,9 @@ async function main() {
       const propertyId = await property({
         loc, type: kind, org: pick([orgs.brokerA, orgs.brokerB]), lifecycle: "occupied", carpet, floor,
         totalFloors: floor ? int(floor + 1, 20) : 2, yearBuilt: int(2010, 2025),
-        images: [pick(IMAGES.interior), pick([...IMAGES.facade, ...IMAGES.residence])],
+        images: kind === "independent_house"
+          ? gallery(IMAGES.house, IMAGES.living, IMAGES.kitchen, IMAGES.bedroom, IMAGES.bath)
+          : gallery(IMAGES.living, IMAGES.bedroom, IMAGES.kitchen, IMAGES.bath, IMAGES.building, ...(chance(0.4) ? [IMAGES.balcony] : [])),
         amenities: someAmenities([...BUILDING_AMENITIES.slice(0, 5), "modular_kitchen", "air_conditioning", "wardrobes", "gated_security", "cctv"], 3, 7),
       });
       await q(`INSERT INTO real_estate.residential_attributes (property_id, bedrooms, bathrooms, balconies, furnishing, facing, covered_parking) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -328,7 +362,7 @@ async function main() {
       await listing({
         propertyId, org: pick([orgs.brokerA, orgs.brokerB]), transactionType: "rent",
         title: `${furnishing === "furnished" ? "Furnished " : ""}${label} for rent in ${loc.name}`,
-        description: `${label.charAt(0).toUpperCase() + label.slice(1)} in ${loc.name}, ${loc.cityName}, ${furnishing.replace("_", "-")}. Sample listing for development.`,
+        description: `${label.charAt(0).toUpperCase() + label.slice(1)} in ${loc.name}, ${loc.cityName}, ${furnishing.replace("_", "-")}. A sample listing, shown for illustration.`,
         price: rent, deposit: rent * DEPOSIT_MONTHS[loc.city], maintenance: chance(0.6) ? roundTo(between(1500, 5000), 100) : null,
         // About 40% are available now, the rest within the next two months.
         availableFrom: new Date(NOW + (chance(0.4) ? -int(1, 20) : int(3, 60)) * DAY).toISOString().slice(0, 10),
@@ -352,7 +386,7 @@ async function main() {
       const meals = pick(["none", "breakfast", "two", "three", "three"]);
       const propertyId = await property({
         loc, type: "pg", org: orgs.pg, lifecycle: "occupied", carpet: null, totalFloors: int(3, 6), yearBuilt: int(2012, 2024),
-        images: [pick(IMAGES.interior), pick(IMAGES.facade)],
+        images: gallery(IMAGES.pg, IMAGES.pg, IMAGES.bath, IMAGES.building, ...(meals === "none" ? [] : [IMAGES.dining])),
         amenities: [...someAmenities(["wifi", "laundry", "housekeeping", "hot_water", "study_table"], 3, 5), ...someAmenities(["power_backup", "cctv", "air_conditioning", "gated_security"], 1, 3)],
       });
       await q(`INSERT INTO real_estate.pg_attributes (property_id, total_rooms, total_beds, attached_bathrooms, common_kitchen) VALUES ($1,$2,$3,$4,$5)`,
@@ -361,7 +395,7 @@ async function main() {
       const who = { men: "Men's PG", women: "Women's PG", any: "Co-living PG" }[policy];
       const listingId = await listing({
         propertyId, org: orgs.pg, transactionType: "pg", title: `${who} in ${loc.name}`,
-        description: `${who} in ${loc.name}, ${loc.cityName}. ${meals === "none" ? "No meals" : meals === "breakfast" ? "Breakfast included" : `${meals === "two" ? "Two" : "Three"} meals a day included`}. Sample listing for development.`,
+        description: `${who} in ${loc.name}, ${loc.cityName}. ${meals === "none" ? "No meals" : meals === "breakfast" ? "Breakfast included" : `${meals === "two" ? "Two" : "Three"} meals a day included`}. A sample listing, shown for illustration.`,
         price: minRent, availableFrom: new Date(NOW + int(0, 20) * DAY).toISOString().slice(0, 10),
       });
       await q(`INSERT INTO marketplace.pg_listing_terms (listing_id, gender_policy, meals, food_preference, notice_period_days, lock_in_months, entry_curfew, visitors_allowed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -381,7 +415,8 @@ async function main() {
       const carpet = kind === "office" ? int(1200, 6000) : int(250, 900);
       const propertyId = await property({
         loc, type: kind, org: pick([orgs.brokerA, orgs.brokerB]), lifecycle: "ready", carpet, floor: kind === "office" ? int(2, 12) : 0,
-        totalFloors: int(4, 15), yearBuilt: int(2012, 2024), images: [pick(IMAGES.city), pick(IMAGES.facade)],
+        totalFloors: int(4, 15), yearBuilt: int(2012, 2024),
+        images: kind === "office" ? gallery(IMAGES.office, IMAGES.office, IMAGES.office, IMAGES.city) : gallery(IMAGES.retail, IMAGES.retail, IMAGES.city),
         amenities: someAmenities(["lift", "power_backup", "covered_parking", "cctv", "fire_safety", "air_conditioning"], 3, 6),
       });
       await q(`INSERT INTO real_estate.commercial_attributes (property_id, grade, workstations, fitout_status) VALUES ($1,$2,$3,$4)`,
@@ -390,7 +425,7 @@ async function main() {
       await listing({
         propertyId, org: pick([orgs.brokerA, orgs.brokerB]), transactionType: "sale",
         title: `${kind === "office" ? "Office space" : "Retail shop"} in ${loc.name}`,
-        description: `${kind === "office" ? "Office" : "Retail"} space in ${loc.name}, ${loc.cityName}. The declared rent is the seller's figure, not a Trustbrick estimate. Sample listing for development.`,
+        description: `${kind === "office" ? "Office" : "Retail"} space in ${loc.name}, ${loc.cityName}. The declared rent is the seller's figure, not a Trustbrick estimate. A sample listing, shown for illustration.`,
         price, negotiable: true, declaredRent: roundTo((price * between(0.06, 0.085)) / 12, 1000),
       });
       counts.sale++;
@@ -402,14 +437,14 @@ async function main() {
     for (const [slug, kind] of [["kokapet", "residential_plot"], ["sarjapur_road", "residential_plot"], ["hinjewadi", "commercial_plot"], ["electronic_city", "residential_plot"], ["wakad", "residential_plot"], ["kondapur", "commercial_plot"], ["kokapet", "open_plot"], ["wakad", "open_plot"], ["electronic_city", "open_plot"]]) {
       const loc = localities.find((l) => l.slug === slug);
       const sqyd = int(150, 600);
-      const propertyId = await property({ loc, type: kind, org: pick([orgs.brokerA, orgs.brokerB]), lifecycle: "ready", carpet: null, images: [pick(IMAGES.city)], amenities: someAmenities(["gated_security", "cctv"], 0, 2) });
+      const propertyId = await property({ loc, type: kind, org: pick([orgs.brokerA, orgs.brokerB]), lifecycle: "ready", carpet: null, images: gallery(IMAGES.city, IMAGES.city), amenities: someAmenities(["gated_security", "cctv"], 0, 2) });
       await q(`INSERT INTO real_estate.land_attributes (property_id, plot_area_sqyd, zoning, road_width_ft, corner_plot) VALUES ($1,$2,$3,$4,$5)`,
         [propertyId, sqyd, kind === "commercial_plot" ? "commercial" : "residential", pick([30, 40, 60]), chance(0.25)]);
       const price = roundTo(sqyd * 9 * RATE[slug] * between(0.55, 0.8), 100000);
       await listing({
         propertyId, org: pick([orgs.brokerA, orgs.brokerB]), transactionType: "sale",
         title: `${sqyd} sq yd ${PLOT_NOUN[kind]} in ${loc.name}`,
-        description: `${PLOT_NOUN[kind].replace(/^./, (c) => c.toUpperCase())} in ${loc.name}, ${loc.cityName}. Sample listing for development.`,
+        description: `${PLOT_NOUN[kind].replace(/^./, (c) => c.toUpperCase())} in ${loc.name}, ${loc.cityName}. A sample listing, shown for illustration.`,
         price, negotiable: true, priceDropFrom: chance(0.3) ? roundTo(price * 1.06, 100000) : null,
       });
       counts.sale++;
@@ -428,19 +463,22 @@ async function main() {
       ["baner", "villa", "entire_home", 4, 8, 11000, 14500, 2000, 2, false, true, "Sample hillside villa with a lawn in Baner"],
       ["gachibowli", "apartment", "private_room", 1, 2, 1800, 1800, 0, 1, true, false, "Sample private room near the financial district"],
     ];
-    const STAY_IMAGES = [IMAGES.interior[0], IMAGES.residence[0], IMAGES.facade[0]];
     for (const [slug, type, space, bedrooms, guests, price, weekend, cleaning, minNights, instant, pets, title] of stayPlan) {
       const loc = localities.find((l) => l.slug === slug);
       const propertyId = await property({
         loc, type, org: orgs.stays, lifecycle: "ready", carpet: bedrooms * int(380, 520), totalFloors: int(1, 3), yearBuilt: int(1950, 2022),
-        images: [pick(STAY_IMAGES), pick(STAY_IMAGES)],
+        images: space === "private_room"
+          ? gallery(IMAGES.bedroom, IMAGES.bath, IMAGES.living, IMAGES.kitchen)
+          : type === "villa" || type === "independent_house"
+            ? gallery(IMAGES.house, IMAGES.living, IMAGES.bedroom, IMAGES.kitchen, IMAGES.bath, IMAGES.pool)
+            : gallery(IMAGES.living, IMAGES.bedroom, IMAGES.kitchen, IMAGES.bath, IMAGES.balcony),
         amenities: [...someAmenities(["wifi", "kitchen", "tv", "washing_machine", "workspace", "self_check_in", "hot_water", "first_aid"], 3, 6), ...someAmenities(["air_conditioning", "power_backup", "swimming_pool", "covered_parking"], 1, 3)],
       });
       await q(`INSERT INTO real_estate.residential_attributes (property_id, bedrooms, bathrooms, balconies, furnishing) VALUES ($1,$2,$3,$4,'furnished')`,
         [propertyId, bedrooms, Math.max(1, bedrooms - int(0, 1)), int(0, 2)]);
       const listingId = await listing({
         propertyId, org: orgs.stays, transactionType: "stay", title,
-        description: `${space === "entire_home" ? "The whole home" : "A private room"} in ${loc.name}, ${loc.cityName}, for up to ${guests} guests. Sample stay for development; it can't be booked.`,
+        description: `${space === "entire_home" ? "The whole home" : "A private room"} in ${loc.name}, ${loc.cityName}, for up to ${guests} guests. A sample stay, shown for illustration; it can't be booked.`,
         price,
       });
       await q(`INSERT INTO stays.stay_terms (listing_id, space_type, max_guests, beds, weekend_price, cleaning_fee, min_nights, max_nights, instant_book, cancellation_policy, pets_allowed, house_rules)

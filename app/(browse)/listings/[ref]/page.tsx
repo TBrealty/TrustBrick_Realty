@@ -259,8 +259,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
         {listing.isSample && (
           <p className="mt-6 flex items-start gap-3 border-l-2 border-brick/50 bg-brick/[0.05] px-4 py-3 text-[0.875rem] leading-relaxed text-graphite">
             <span className="eyebrow mt-0.5 shrink-0 text-brick">Sample</span>
-            This is a sample listing for development. It is not a real property,
-            and its price, organization and RERA number are illustrative.
+            This sample listing shows how Trustbrick will look. It isn&apos;t a real property,
+            and its price, organization and RERA number are for illustration only.
           </p>
         )}
 
