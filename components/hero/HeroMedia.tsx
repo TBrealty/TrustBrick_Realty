@@ -3,7 +3,7 @@ import { images } from "@/lib/images";
 
 /**
  * The hero photograph. Its blurred placeholder is in the first paint and the photograph replaces
- * it when it arrives; the frame settles once (CSS only), so nothing waits for JavaScript.
+ * it when it arrives; the frame eases in once (CSS only), so nothing waits for JavaScript.
  */
 export function HeroMedia() {
   return (

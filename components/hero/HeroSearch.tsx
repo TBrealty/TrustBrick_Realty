@@ -31,7 +31,7 @@ export function HeroSearch({ locations }: { locations: { slug: string; name: str
   const current = KINDS.find((k) => k.id === kind)!;
 
   return (
-    <div className="w-full max-w-[52rem]">
+    <div className="mx-auto w-full max-w-[62rem]">
       <form
         action={current.path}
         method="get"
@@ -50,7 +50,7 @@ export function HeroSearch({ locations }: { locations: { slug: string; name: str
           // Leave empty fields out of the address, so a bare search lands on a clean page.
           for (const el of Array.from(form.elements) as HTMLInputElement[]) if (el.name && !el.value) el.disabled = true;
         }}
-        className="rounded-[14px] bg-card p-2.5 text-ink shadow-[0_24px_60px_-24px_rgb(0_0_0/0.7)] sm:p-3"
+        className="rounded-[14px] bg-card p-2.5 text-left text-ink shadow-[0_24px_60px_-24px_rgb(0_0_0/0.7)] sm:p-3"
       >
         <div role="radiogroup" aria-label="What you're looking for" className="flex gap-1 overflow-x-auto pb-2.5 [scrollbar-width:none] sm:pb-3">
           {KINDS.map((k) => {
@@ -110,7 +110,7 @@ export function HeroSearch({ locations }: { locations: { slug: string; name: str
         </div>
       </form>
 
-      <ul aria-label="Popular searches" className="mt-4 flex flex-wrap gap-2">
+      <ul aria-label="Popular searches" className="mt-4 flex flex-wrap justify-center gap-2">
         {SHORTCUTS.map((s) => (
           <li key={s.href}>
             <a href={s.href} className="inline-flex rounded-full border border-on-contrast/25 px-3.5 py-1.5 text-[0.8125rem] text-on-contrast/85 transition-colors duration-300 hover:border-on-contrast/60 hover:text-on-contrast">

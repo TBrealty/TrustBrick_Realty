@@ -1,9 +1,15 @@
+import { Lines } from "@/components/typography/Lines";
 import { HeroMedia } from "./HeroMedia";
 import { HeroSearch } from "./HeroSearch";
 
+const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
+
 /**
- * The landing page's opening: the skyline, the promise, and straight into a search. All of it is
- * in the first paint; the only movement is the photograph settling and the headline fading in.
+ * The landing page's opening: the skyline, the promise, and straight into a search, centred.
+ * The entrance is CSS only and over in about a second: the photograph eases in, the headline
+ * rises line by line, and the subtitle and search box glide up into place. Nothing a visitor
+ * needs is ever hidden: on a slow phone the first frame can stay on screen while JavaScript
+ * loads, so the search box is visible (and usable) from that first frame.
  */
 export function Hero({ locations }: { locations: { slug: string; name: string }[] }) {
   return (
@@ -18,24 +24,24 @@ export function Hero({ locations }: { locations: { slug: string; name: string }[
         <HeroMedia />
         <div aria-hidden className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-contrast/70 to-transparent" />
         <div aria-hidden className="absolute inset-0 bg-linear-to-t from-contrast via-contrast/55 to-contrast/10" />
-        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(120%_80%_at_0%_100%,rgb(13_17_25/0.7),transparent_60%)]" />
+        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_100%,rgb(13_17_25/0.7),transparent_60%)]" />
       </div>
 
       <div className="shell flex flex-1 flex-col justify-end pt-32 pb-8 sm:pb-10">
-        <div data-parallax="-0.04" data-fade="0.7">
-          <h1 id="hero-title" className="hero-title-in display text-[clamp(3.25rem,14vw,4.5rem)] leading-[0.88] sm:text-[clamp(4.5rem,8.6vw,9.5rem)]">
-            <span className="block">Real estate,</span> <em className="block text-on-contrast/95">built on trust.</em>
+        <div data-parallax="-0.04" data-fade="0.7" className="text-center">
+          <h1 id="hero-title" className="hero-lines display text-[clamp(3.25rem,14vw,4.5rem)] leading-[0.88] sm:text-[clamp(4.5rem,8.6vw,9.5rem)]">
+            <Lines lines={["Real estate,", <em key="i" className="text-on-contrast/95">built on trust.</em>]} delay={80} step={120} />
           </h1>
 
-          <p className="mt-6 max-w-[42ch] text-[1.0625rem] leading-relaxed text-on-contrast/78 sm:mt-8 sm:text-[1.1875rem]">
+          <p className="hero-rise mx-auto mt-6 max-w-[42ch] text-[1.0625rem] leading-relaxed text-on-contrast/78 sm:mt-8 sm:text-[1.1875rem]" style={d(280)}>
             Discover, evaluate and move through real estate with greater confidence.
           </p>
 
-          <div className="mt-7 sm:mt-9">
+          <div className="hero-rise mt-7 sm:mt-9" style={d(380)}>
             <HeroSearch locations={locations} />
           </div>
 
-          <p className="mt-6 text-[0.875rem] text-on-contrast/70">
+          <p className="hero-rise mt-6 text-[0.875rem] text-on-contrast/70" style={d(480)}>
             Agent, broker or developer?{" "}
             <a href="/become-an-agent" className="text-on-contrast underline decoration-on-contrast/40 underline-offset-4 transition-colors hover:decoration-on-contrast">
               Join Trustbrick →
