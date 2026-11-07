@@ -1,12 +1,16 @@
-// SAMPLE listings for local development ONLY.
+// SAMPLE listings, for local development and, on purpose only, for a temporary demo in production.
 //
 // Every organization, property and listing written here is flagged as a sample
 // (organizations.is_sample, properties.source = 'sample', listings.is_sample) and
 // is badged as such in the UI. Names are deliberately generic ("Sample …") so they
 // cannot be mistaken for real developers or projects, and RERA numbers are
 // visibly fake. Output is deterministic, so URLs stay stable between runs.
+// It creates no logins: sample organizations have no members.
 //
-//   npm run db:seed:sample
+//   npm run db:seed:sample                  add (or refresh) the samples locally
+//   npm run db:seed:sample -- --remove      take them out again
+//
+// In production (deploy/README.md) both need --allow-production --allow-remote.
 import pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { PLACES, seedReference } from "./reference.mjs";
@@ -15,10 +19,12 @@ try {
   process.loadEnvFile(".env.local");
 } catch {}
 
-// ── Safety: never against production, never against a remote database by accident ──
+const REMOVE = process.argv.includes("--remove");
+
+// ── Safety: never against production or a remote database by accident ──
 const url = process.env.DATABASE_URL ?? "";
-if (process.env.NODE_ENV === "production") {
-  console.error("Refusing to seed sample listings with NODE_ENV=production.");
+if (process.env.NODE_ENV === "production" && !process.argv.includes("--allow-production")) {
+  console.error("Refusing to touch sample listings with NODE_ENV=production. Pass --allow-production if you really mean it.");
   process.exit(1);
 }
 const host = (() => {
@@ -106,12 +112,23 @@ async function main() {
     const { rows: oldAddr } = await q(`
       SELECT address_id AS id FROM real_estate.properties WHERE source = 'sample' AND organization_id IN (${mine})
       UNION SELECT p.address_id FROM real_estate.projects p WHERE p.organization_id IN (${mine})`);
+    // Enquiries visitors sent about sample listings (in a production demo) belong to the
+    // sample organizations, and would otherwise stop them being removed.
+    await q(`DELETE FROM crm.visits WHERE organization_id IN (${mine})`);
+    await q(`DELETE FROM crm.leads WHERE organization_id IN (${mine})`);
+    await q(`DELETE FROM crm.contacts WHERE organization_id IN (${mine})`);
     await q(`DELETE FROM marketplace.listings WHERE is_sample AND organization_id IN (${mine})`);
     await q(`DELETE FROM real_estate.properties WHERE source = 'sample' AND organization_id IN (${mine})`);
     await q(`DELETE FROM real_estate.buildings WHERE project_id IN (SELECT p.id FROM real_estate.projects p WHERE p.organization_id IN (${mine}))`);
     await q(`DELETE FROM real_estate.projects WHERE organization_id IN (${mine})`);
     if (oldAddr.length) await q(`DELETE FROM geography.addresses WHERE id = ANY($1::uuid[])`, [oldAddr.map((r) => r.id)]);
     await q(`DELETE FROM orgs.organizations WHERE id IN (${mine})`);
+
+    if (REMOVE) {
+      await q("COMMIT");
+      console.log("Sample listings removed.");
+      return;
+    }
 
     // ── Lookups ───────────────────────────────────────────────────────────────
     const placeId = Object.fromEntries((await q(`SELECT path::text, id FROM geography.places`)).rows.map((r) => [r.path, r.id]));
@@ -428,7 +445,7 @@ async function main() {
     }
 
     await q("COMMIT");
-    console.log("Sample listings ready (development only):", counts);
+    console.log("Sample listings ready (each one badged \"Sample\"):", counts);
   } catch (error) {
     await q("ROLLBACK");
     throw error;

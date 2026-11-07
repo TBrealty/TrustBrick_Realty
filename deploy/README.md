@@ -240,6 +240,14 @@ seconds while the new version starts.
 | Read the site's logs | `docker compose logs -f --tail=200 app` |
 | Restart the site | `docker compose restart app` |
 | Open the database | `set -a; . ./.env; set +a; docker run --rm -it -v "$PWD/rds-ca.pem:/ca.pem:ro" postgres:17-alpine psql "host=$DB_HOST user=$DB_MASTER_USER dbname=trustbrick sslmode=verify-full sslrootcert=/ca.pem"` (asks for the master password) |
+| Add sample listings for a demo | `docker compose run --rm tools npm run db:seed:sample -- --allow-production --allow-remote` |
+| Take the sample listings out | `docker compose run --rm tools npm run db:seed:sample -- --remove --allow-production --allow-remote` |
+
+The sample listings (107: homes to buy and rent, new projects, PGs and stays across
+Hyderabad, Bengaluru, Pune, Mumbai and Goa) are for showing the site with data in it. Each one is
+badged "Sample" and kept out of search engines, the organizations behind them have no members
+and so no logins, and stays can't be booked. Taking them out also removes any enquiries visitors
+sent about them. Never use `db:seed:dev` on the server: it creates logins with a shared password.
 
 ## Backups
 
