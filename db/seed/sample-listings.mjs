@@ -80,7 +80,13 @@ const IMAGES = {
 };
 
 const DAY = 86_400_000;
-const NOW = Date.UTC(2026, 8, 17, 6, 0, 0);
+// Dates count back from the day it runs (06:00 UTC), so the samples are recent and stay live:
+// each was published 1–45 days ago and, like a real listing, expires 90 days after that, so all of
+// them stay up for at least 45 days. Run it again to refresh them.
+const NOW = (() => {
+  const d = new Date();
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 6, 0, 0);
+})();
 
 // ── Build the locality index from reference data ─────────────────────────────
 const localities = [];
