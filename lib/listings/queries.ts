@@ -444,6 +444,11 @@ export type ListingDetail = ListingSummary & {
   amenities: { code: string; name: string }[];
   images: { key: string; alt: string | null }[];
   priceHistory: { price: number; from: string; to: string | null }[];
+  /**
+   * Roughly where it is, for the map: the address's point rounded to 0.01° (a grid about 1 km
+   * across), so the exact building is never given away. The true point is always within ~800 m.
+   */
+  approxLocation: { lat: number; lng: number } | null;
   /** Homestays: full terms and the public face of the host. Never the exact address. */
   stay: (StayTermsView & { host: Awaited<ReturnType<typeof publicHost>>; hostUserId: string | null }) | null;
 };
@@ -456,6 +461,7 @@ export const getListing = cache(async (referenceId: string): Promise<ListingDeta
       l.description, l.maintenance_amount, l.rera_id, l.expires_at, org.name AS organization_name,
       p.built_up_area_sqft, p.super_built_up_area_sqft, p.floor_number, p.total_floors, p.year_built, p.custom_amenities,
       ra.balconies, ra.facing, ra.covered_parking, a.postal_code,
+      round(ST_Y(a.location::geometry)::numeric, 2) AS approx_lat, round(ST_X(a.location::geometry)::numeric, 2) AS approx_lng,
       la.zoning, la.road_width_ft, la.corner_plot,
       ca.grade AS commercial_grade, ca.fitout_status, ca.workstations,
       pga.total_rooms, pga.total_beds, pgt.notice_period_days, pgt.lock_in_months,
@@ -508,6 +514,7 @@ export const getListing = cache(async (referenceId: string): Promise<ListingDeta
     facing: (r.facing as string) ?? null,
     coveredParking: num(r.covered_parking),
     postalCode: (r.postal_code as string) ?? null,
+    approxLocation: r.approx_lat === null || r.approx_lat === undefined ? null : { lat: Number(r.approx_lat), lng: Number(r.approx_lng) },
     zoning: (r.zoning as string) ?? null,
     roadWidthFt: num(r.road_width_ft),
     cornerPlot: r.corner_plot === null || r.corner_plot === undefined ? null : Boolean(r.corner_plot),

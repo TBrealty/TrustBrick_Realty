@@ -629,6 +629,59 @@ html:has(dialog.photo-viewer[open]) {
   background-color: rgb(18 21 27 / 0.97);
 }
 
+/* Listing map (components/listings/ListingMap.tsx): OpenStreetMap tiles toned to the site's warm
+   paper, and turned to night in the dark theme; the zoom buttons and credit in the site's type. */
+.listing-map .leaflet-container {
+  background: var(--sand);
+  font-family: inherit;
+}
+/* The tint layer (ListingMap's "tint" pane): warm and softened in the light theme, dimmed in the
+   dark one. Blended rather than filtered, so the tiles keep seamless edges. */
+.listing-map .leaflet-tint-pane {
+  mix-blend-mode: color;
+}
+.listing-map .listing-map-tint {
+  fill: #d9cbb2;
+  fill-opacity: 0.6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .listing-map .leaflet-tint-pane {
+    mix-blend-mode: normal;
+  }
+  :root:not([data-theme="light"]) .listing-map .listing-map-tint {
+    fill: #0d1119;
+    fill-opacity: 0.5;
+  }
+}
+:root[data-theme="dark"] .listing-map .leaflet-tint-pane {
+  mix-blend-mode: normal;
+}
+:root[data-theme="dark"] .listing-map .listing-map-tint {
+  fill: #0d1119;
+  fill-opacity: 0.5;
+}
+.listing-map .leaflet-bar {
+  border: 1px solid var(--line-light);
+  border-radius: 6px;
+  box-shadow: none;
+}
+.listing-map .leaflet-bar a {
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom-color: var(--line-light);
+}
+.listing-map .leaflet-bar a:hover {
+  background: var(--ivory);
+}
+.listing-map .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--paper) 85%, transparent);
+  color: var(--stone-deep);
+  font-size: 0.6875rem;
+}
+.listing-map .leaflet-control-attribution a {
+  color: inherit;
+}
+
 /* Generic dropdown entrance, shared by menus that are not portalled */
 .menu-in {
   animation: menu-in 0.2s var(--ease-smooth) both;

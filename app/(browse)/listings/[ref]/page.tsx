@@ -6,6 +6,7 @@ import { BookmarkButton } from "@/components/listings/BookmarkButton";
 import { ListingActionBar } from "@/components/listings/ListingActionBar";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { ListingGallery } from "@/components/listings/ListingGallery";
+import { ListingMap } from "@/components/listings/ListingMap";
 import { TrustPanel } from "@/components/listings/TrustPanel";
 import {
   ListingContact,
@@ -566,6 +567,26 @@ export default async function ListingPage({ params, searchParams }: Props) {
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {listing.approxLocation && (
+              <section aria-labelledby="location-title" className="mt-10 border-t border-line-light pt-8">
+                <h2 id="location-title" className="mb-4 text-[1.125rem] font-medium">
+                  Location
+                </h2>
+                <ListingMap
+                  lat={listing.approxLocation.lat}
+                  lng={listing.approxLocation.lng}
+                  place={listing.city ? `${listing.locality}, ${listing.city}` : listing.locality}
+                  note={
+                    listing.isSample
+                      ? "As a sample listing, its location is only illustrative."
+                      : listing.transactionType === "stay"
+                        ? "The exact address is shared once your booking is confirmed."
+                        : "Ask for the exact address when you arrange a visit."
+                  }
+                />
               </section>
             )}
 
