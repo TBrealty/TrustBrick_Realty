@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Arrow } from "@/components/buttons/ButtonLink";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { ListingRail } from "@/components/listings/ListingRail";
 import { SectionLabel } from "@/components/typography/SectionLabel";
 import { getSession } from "@/lib/auth/session";
 import type { HomeRow } from "@/lib/listings/home";
@@ -48,22 +49,13 @@ export async function Explore({ rows }: { rows: HomeRow[] }) {
 
         {rows.map((row) => (
           <div key={row.id} data-reveal className="mt-14 sm:mt-16">
-            <div className="mb-5 flex items-end justify-between gap-6">
-              <div>
-                <h3 className="display text-[clamp(1.9rem,3.2vw,2.75rem)] leading-none">{row.title}</h3>
-                <p className="mt-2 text-[0.9375rem] text-stone-deep">{row.subtitle}</p>
-              </div>
-              <Link href={row.href} className="link-rule shrink-0 text-[0.9375rem] text-brick">
-                See all →
-              </Link>
-            </div>
-            <ul className="-mx-(--gutter) flex snap-x snap-mandatory scroll-px-(--gutter) gap-5 overflow-x-auto px-(--gutter) pb-2 [scrollbar-width:thin]">
+            <ListingRail title={row.title} subtitle={row.subtitle} href={row.href}>
               {row.items.map((listing) => (
                 <li key={listing.id} className="w-[78%] shrink-0 snap-start sm:w-[calc(50%-10px)] lg:w-[calc(25%-15px)]">
                   <ListingCard listing={listing} kind={row.kind} saved={saved.has(listing.propertyId)} isLoggedIn={Boolean(session)} />
                 </li>
               ))}
-            </ul>
+            </ListingRail>
           </div>
         ))}
       </div>

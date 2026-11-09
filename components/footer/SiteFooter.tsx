@@ -7,7 +7,7 @@ export function SiteFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer id="contact" data-nav="dark" className="relative overflow-hidden bg-contrast text-on-contrast">
+    <footer id="contact" data-nav="dark" className="relative overflow-hidden border-t border-line-dark bg-contrast text-on-contrast">
       <div className="shell pt-20 sm:pt-28">
         <div className="grid gap-14 lg:grid-cols-12">
           <div className="lg:col-span-5">

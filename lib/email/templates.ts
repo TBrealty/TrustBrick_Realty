@@ -7,14 +7,14 @@ function layout(heading: string, paragraphs: string[], action?: { label: string;
   const body = paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#3b404b">${p}</p>`).join("");
   const button = action
     ? `<p style="margin:28px 0"><a href="${action.url}" style="background:#0d1119;color:#f8f6f1;padding:14px 22px;text-decoration:none;font-weight:600;display:inline-block">${action.label}</a></p>
-       <p style="margin:0 0 16px;font-size:13px;color:#6b655a;line-height:1.5">If the button does not work, paste this link into your browser:<br><span style="word-break:break-all">${action.url}</span></p>`
+       <p style="margin:0 0 16px;font-size:13px;color:#5f594e;line-height:1.5">If the button does not work, paste this link into your browser:<br><span style="word-break:break-all">${action.url}</span></p>`
     : "";
   return `<!doctype html><html><body style="margin:0;background:#f2eee6;font-family:-apple-system,Segoe UI,sans-serif">
     <div style="max-width:520px;margin:0 auto;padding:40px 24px">
       <p style="margin:0 0 32px;font-weight:700;font-size:18px;color:#0d1119">Trust<span style="color:#de6a3d">brick</span></p>
       <h1 style="margin:0 0 20px;font-size:26px;font-weight:600;color:#0d1119">${heading}</h1>
       ${body}${button}
-      <p style="margin:32px 0 0;font-size:12px;color:#6b655a">Trustbrick Realty and Fintech Company Pvt. Ltd.</p>
+      <p style="margin:32px 0 0;font-size:12px;color:#5f594e">Trustbrick Realty and Fintech Company Pvt. Ltd.</p>
     </div></body></html>`;
 }
 

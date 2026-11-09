@@ -25,7 +25,7 @@ export function Vision() {
       <div className="shell">
         <div className="grid gap-y-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-7">
-            <SectionLabel index="06" className="mb-8 text-stone-deep">
+            <SectionLabel className="mb-8 text-stone-deep">
               Where we&rsquo;re going
             </SectionLabel>
             <h2 id="vision-title" data-reveal="lines" className="display text-[clamp(2.5rem,5.4vw,5.75rem)]">
@@ -74,7 +74,7 @@ export function Vision() {
             </p>
           </div>
           <div data-reveal className="flex flex-wrap gap-3 lg:col-span-5 lg:justify-end">
-            <ButtonLink href="#top" variant="dark" arrow>
+            <ButtonLink href="/" variant="dark" arrow>
               Search homes
             </ButtonLink>
             <ButtonLink href="/become-an-agent" variant="ghost-dark">

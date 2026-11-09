@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { SiteFooter } from "@/components/footer/SiteFooter";
+import { MotionController } from "@/components/motion/MotionController";
 import { AppHeader } from "@/components/navigation/AppHeader";
+import { Intelligence } from "@/components/sections/Intelligence";
+import { Paths } from "@/components/sections/Paths";
+import { Vision } from "@/components/sections/Vision";
 import { images } from "@/lib/images";
 import { FOR_OWNERS, LEGAL_VERIFICATION, SERVICES, links, site } from "@/lib/site";
 
@@ -109,6 +113,9 @@ export default function AboutPage() {
           </div>
         </section>
 
+        <Paths />
+        <Intelligence />
+
         <section className="shell py-20 sm:py-28">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-16">
             <div className="lg:col-span-4">
@@ -127,6 +134,10 @@ export default function AboutPage() {
             </ul>
           </div>
         </section>
+
+        <div className="border-t border-line-light">
+          <Vision />
+        </div>
 
         <section className="border-t border-line-light bg-paper">
           <div className="shell flex flex-col gap-8 py-16 sm:py-20 lg:flex-row lg:items-end lg:justify-between">
@@ -149,6 +160,8 @@ export default function AboutPage() {
         </section>
       </main>
       <SiteFooter />
+      {/* The moved landing-page sections reveal and move on scroll. */}
+      <MotionController />
     </div>
   );
 }

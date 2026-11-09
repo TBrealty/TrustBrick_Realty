@@ -111,7 +111,7 @@ export function SelectField({
         aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? messageId : undefined}
         className={`${inputClass} appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10 ${error ? "border-brick" : "border-line-light"}`}
-        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236b655a' stroke-width='1.6'/%3E%3C/svg%3E\")" }}
+        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235f594e' stroke-width='1.6'/%3E%3C/svg%3E\")" }}
       >
         <option value="" disabled={required}>
           {placeholder}
