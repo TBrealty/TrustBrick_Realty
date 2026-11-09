@@ -8,7 +8,14 @@ export function SiteFooter() {
 
   return (
     <footer id="contact" data-nav="dark" className="relative overflow-hidden border-t border-line-dark bg-contrast text-on-contrast">
-      <div className="shell pt-20 sm:pt-28">
+      {/* Signature: the word as the footer's background, behind everything else. The content above
+          lets the pointer through except on its links and controls, so the hover glow follows the
+          pointer across the footer's empty space. */}
+      <div aria-hidden className="absolute inset-x-0 bottom-0 px-(--gutter) pb-4 sm:pb-6">
+        <TextHoverEffect text="Trustbrick" viewBox="0 0 364 96" y={50} fontSize={100} />
+      </div>
+
+      <div className="shell pointer-events-none relative z-10 pt-20 sm:pt-28 [&_a]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto [&_label]:pointer-events-auto [&_select]:pointer-events-auto">
         <div className="grid gap-14 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <LogoLockup />
@@ -59,11 +66,6 @@ export function SiteFooter() {
           </p>
           <ThemeChoicePicker className="text-on-contrast/70" />
         </div>
-      </div>
-
-      {/* Signature: the word sinks below the footer's edge; the viewBox crops its lower part. */}
-      <div aria-hidden className="px-(--gutter)">
-        <TextHoverEffect text="Trustbrick" viewBox="0 0 364 62" y={45} fontSize={100} />
       </div>
     </footer>
   );
