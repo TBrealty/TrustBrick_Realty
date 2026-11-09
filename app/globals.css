@@ -622,6 +622,13 @@ html:has(dialog.photo-viewer[open]) {
   animation: fade-rise 0.7s var(--ease-smooth) both;
 }
 
+/* The Services menu is frosted glass over the hero. Once the header has its own blurred
+   background (data-solid, after scrolling), a blur inside it can't reach the page beneath,
+   so the page would show through sharp: there the panel is solid instead. */
+[data-solid] .services-panel {
+  background-color: rgb(18 21 27 / 0.97);
+}
+
 /* Generic dropdown entrance, shared by menus that are not portalled */
 .menu-in {
   animation: menu-in 0.2s var(--ease-smooth) both;

@@ -1,16 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { FOR_OWNERS, LEGAL_VERIFICATION, SERVICES } from "@/lib/site";
+import { LEGAL_VERIFICATION, SERVICES } from "@/lib/site";
+
+/** Line icons for the menu, one per destination (24×24, drawn in currentColor). */
+const ICONS: Record<string, React.ReactNode> = {
+  "/buy": <path d="M3 10.5 12 4l9 6.5M5 9.5V20h14V9.5M10 20v-5h4v5" />,
+  "/rent": <path d="M11.5 15a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm-1-2.5 8-8M16 7l2 2m-4 0 1.5 1.5" />,
+  "/pg": <path d="M3 18V8m0 6h18v4m0-4v-2a3 3 0 0 0-3-3h-7v5m-2.4-3a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0Z" />,
+  "/stays": <path d="M4 20h16M6 20V9l6-5 6 5v11m-8 0v-4a2 2 0 0 1 4 0v4" />,
+  "/invest": <path d="M4 19h16M5 15l4-4 3 3 6-7m-4 0h4v4" />,
+  "/legal-verification": <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Zm-3 9 2 2 4-4" />,
+};
 
 /**
- * The Services disclosure: a button that opens a panel of links. Opens on click (and with
- * Enter, Space or ↓), closes on Escape, on a click outside, or when a link is chosen.
- * Arrow keys move between the links.
+ * The Services disclosure: a button that opens a frosted-glass panel of links under it, each with
+ * its icon. The hero shows through, blurred. Opens on click (and with Enter, Space or ↓), closes
+ * on Escape, on a click outside, or when a link is chosen. Arrow keys move between the links; the
+ * section you're in is marked like a hovered one.
  */
 export function ServicesMenu({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname() ?? "";
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -65,7 +78,10 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
     }
   };
 
+  // Each link: its icon in a small tile, then its name; the description is its tooltip. Under the
+  // pointer, in focus, or for the section you're in, the row lights up and the tile turns brick.
   const item = (entry: { href: string; label: string; hint: string }, i: number) => {
+    const current = pathname === entry.href || pathname.startsWith(`${entry.href}/`);
     return (
       <li key={entry.href}>
         <Link
@@ -73,16 +89,17 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
             linksRef.current[i] = el;
           }}
           href={entry.href}
+          title={entry.hint}
+          aria-current={current ? "page" : undefined}
           onClick={() => setOpen(false)}
-          className="group/item block rounded-[3px] px-3 py-2.5 outline-none transition-colors hover:bg-ink/[0.045] focus-visible:bg-ink/[0.06]"
+          className="group/item flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[0.9rem] whitespace-nowrap text-white/80 outline-none transition-colors duration-200 hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white aria-[current=page]:bg-white/10 aria-[current=page]:text-white"
         >
-          <span className="flex items-center justify-between gap-3 text-[0.9375rem] font-medium text-ink">
-            {entry.label}
-            <span aria-hidden className="text-brick opacity-0 transition-[opacity,transform] duration-300 group-hover/item:translate-x-0.5 group-hover/item:opacity-100 group-focus-visible/item:opacity-100">
-              →
-            </span>
+          <span className="grid size-[1.9rem] flex-none place-items-center rounded-[8px] bg-white/[0.07] transition-colors duration-200 group-hover/item:bg-brick-bright group-hover/item:text-white group-focus-visible/item:bg-brick-bright group-aria-[current=page]/item:bg-brick-bright">
+            <svg viewBox="0 0 24 24" aria-hidden className="size-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              {ICONS[entry.href]}
+            </svg>
           </span>
-          <span className="mt-0.5 block text-[0.8125rem] leading-snug text-stone-deep">{entry.hint}</span>
+          {entry.label}
         </Link>
       </li>
     );
@@ -115,21 +132,11 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
         id={panelId}
         onKeyDown={onPanelKey}
         hidden={!open}
-        className="absolute top-[calc(100%+1.1rem)] left-1/2 z-50 w-[36rem] -translate-x-1/2 rounded-[4px] border border-line-light bg-ivory p-3 text-ink shadow-[0_24px_60px_-20px_rgb(13_17_25/0.45)]"
+        className="services-panel menu-in absolute top-full left-0 z-50 mt-3.5 w-max min-w-[13.5rem] rounded-2xl border border-white/[0.14] bg-[rgb(18_21_27/0.6)] p-1.5 text-white shadow-[0_30px_60px_-20px_rgb(0_0_0/0.6),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150"
       >
-        <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3">
-          <div>
-            <p className="eyebrow px-3 pt-1.5 pb-1 text-stone-deep">Find a place</p>
-            <ul>{SERVICES.map((e, i) => item(e, i))}</ul>
-            <p className="eyebrow mt-2 border-t border-line-light px-3 pt-3 pb-1 text-stone-deep">Before you sign</p>
-            <ul>{item(LEGAL_VERIFICATION, SERVICES.length)}</ul>
-          </div>
-          <div className="rounded-[3px] bg-paper p-1">
-            <p className="eyebrow px-3 pt-1.5 pb-1 text-stone-deep">For owners &amp; agents</p>
-            <ul>{FOR_OWNERS.map((e, i) => item(e, SERVICES.length + 1 + i))}</ul>
-            <p className="px-3 pt-3 pb-2 text-[0.75rem] leading-snug text-stone-deep">Hosts and agents are checked by the Trustbrick team before they can list.</p>
-          </div>
-        </div>
+        <ul className="space-y-0.5">{SERVICES.map((e, i) => item(e, i))}</ul>
+        <div aria-hidden className="mx-2.5 my-1.5 border-t border-white/10" />
+        <ul>{item(LEGAL_VERIFICATION, SERVICES.length)}</ul>
       </div>
     </div>
   );
