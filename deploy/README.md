@@ -249,6 +249,38 @@ badged "Sample" and kept out of search engines, the organizations behind them ha
 and so no logins, and stays can't be booked. Taking them out also removes any enquiries visitors
 sent about them. Never use `db:seed:dev` on the server: it creates logins with a shared password.
 
+## Monitoring
+
+Two alarms, so you hear about a problem before visitors tell you.
+
+**Error alerts, from inside the site.** Errors on the server (a page that fails, a form that
+breaks) and in visitors' browsers are written to the logs and emailed to `ALERT_EMAIL` in `.env`.
+The same error is emailed at most once an hour (the next email says how many more there were),
+with at most 20 server and 10 browser emails an hour. Each email has an error ID; to see the full
+log around it:
+
+```bash
+docker compose logs app | grep <the error ID>
+```
+
+While SES is still in its sandbox it only sends to verified addresses, so verify `ALERT_EMAIL` in
+SES (Verified identities → Create identity → Email address) until production access is granted.
+After changing `.env`, run `docker compose up -d app`.
+
+**Uptime, from outside (UptimeRobot, free).** The site can't tell you it's down if it's down, so
+something outside AWS checks it:
+
+1. Sign up at uptimerobot.com (the free plan is enough).
+2. Add a monitor: type **HTTP(s)**, URL `https://trustbrick.org/api/health`, every **5 minutes**.
+   It answers 200 when the site is up and can reach the database, and 503 when the database
+   isn't answering.
+3. Add a second monitor for the home page, `https://trustbrick.org/`, the same way.
+4. Under alert contacts, add your email (and the mobile app for push alerts, if you like).
+
+When the domain changes, update both monitors' URLs.
+
+`docker compose ps` also shows the site as healthy or unhealthy, from the same check.
+
 ## Backups
 
 - **Database:** RDS backs it up automatically and can restore it **to any minute** in the retention period (7 days or more, step 3b).

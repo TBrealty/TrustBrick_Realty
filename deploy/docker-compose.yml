@@ -43,6 +43,13 @@ services:
     volumes:
       # Uploads when STORAGE_DRIVER=local; unused with S3.
       - uploads:/data/storage
+    # `docker compose ps` shows healthy or unhealthy: the site answering and reaching the database.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
 
   # Joins the app's guided 360° photos into panoramas (stitcher/README.md).
   stitcher:
