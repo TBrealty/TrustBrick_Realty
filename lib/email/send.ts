@@ -17,6 +17,12 @@ const MAX_CAPTURED = 50;
 // /dev/mailbox. globalThis keeps the list alive across hot reloads.
 const store = globalThis as unknown as { trustbrickOutbox?: CapturedEmail[]; trustbrickSes?: SESv2Client };
 
+/** Addresses on domains reserved for testing and documentation (RFC 2606), which never receive mail. */
+export function isReservedAddress(to: string): boolean {
+  const domain = to.trim().toLowerCase().split("@").pop() ?? "";
+  return /(^|\.)(test|example|invalid|localhost)$/.test(domain) || /(^|\.)example\.(com|net|org)$/.test(domain);
+}
+
 export function capturedEmails(): CapturedEmail[] {
   return store.trustbrickOutbox ?? [];
 }
@@ -35,6 +41,13 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     outbox.unshift({ ...message, id: crypto.randomUUID(), sentAt: new Date() });
     outbox.length = Math.min(outbox.length, MAX_CAPTURED);
     console.info(`[email] to=${message.to} subject="${message.subject}" → open /dev/mailbox`);
+    return;
+  }
+
+  // Test accounts (db/seed/dev-workspaces.mjs) use reserved domains that can't receive mail.
+  // Sending to them would only bounce, and bounces count against the sender's standing with SES.
+  if (isReservedAddress(message.to)) {
+    console.info(`[email] skipped test address ${message.to} subject="${message.subject}"`);
     return;
   }
 

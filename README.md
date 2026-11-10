@@ -220,7 +220,7 @@ To stop the server, press `Ctrl + C` in the terminal.
 | `npm run db:studio` | Opens Drizzle Studio to browse the database |
 | `npm run db:seed:reference` | Loads property types, amenities and places. Safe to run repeatedly |
 | `npm run db:seed:sample` | **Development only.** Replaces the sample listings used by the browse pages |
-| `npm run db:seed:dev` | **Development only.** Creates the SuperAdmin, admin, agent and customer accounts and their workspace data |
+| `npm run db:seed:dev` | Creates test accounts of every kind (SuperAdmin, admins, organization roles, agents, customers, hosts) and their workspace data. `-- --remove` locks them again. In production only with `--allow-production --allow-remote`, and then with a random password (deploy/README.md) |
 | `npm run admin:bootstrap -- --email you@company.com` | Makes an existing, email-confirmed account a SuperAdmin. The only way a SuperAdmin is created |
 | `npm run test` | Runs the integration tests against a throwaway `trustbrick_test` database (see [Testing](#testing)) |
 
@@ -951,7 +951,7 @@ The site now needs a Node.js server and a PostgreSQL database.
 6. **Create the first SuperAdmin** from a trusted shell: sign up normally, confirm the email, then run
    `npm run admin:bootstrap -- --email you@company.com`. Invite every other admin from `/admins`; admins then onboard
    organizations and agents.
-7. **Never run `db:seed:sample` or `db:seed:dev` in production.** Both refuse to.
+7. **Don't run `db:seed:sample` or `db:seed:dev` in production by accident.** Both refuse unless given `--allow-production --allow-remote`; deploy/README.md says when that's wanted (a demo, live testing) and how to take the data out again.
 
 The build needs internet access so that `next/font` can fetch the Google Fonts.
 

@@ -1,13 +1,18 @@
-// DEVELOPMENT accounts and workspace data for the Admin, SuperAdmin and Agent portals.
+// TEST accounts, one of every kind, and workspace data for the Admin, SuperAdmin and Agent portals.
 //
-// Everything here is fake and flagged: accounts use the reserved @trustbrick.test domain,
-// organizations are "Sample …" with is_sample = true, and every listing is a sample listing,
-// badged in the UI. Re-running replaces the data but keeps the accounts, because the audit
-// trail is append-only and must not be rewritten.
+// Everything here is fake and flagged: accounts use the reserved @trustbrick.test domain (the
+// site never emails it, lib/email/send.ts), organizations are "Sample …" with is_sample = true,
+// and every listing is a sample listing, badged in the UI. Re-running replaces the data but keeps
+// the accounts, because the audit trail is append-only and must not be rewritten.
 //
-//   npm run db:seed:dev
+//   npm run db:seed:dev                    add (or refresh) them locally
+//   npm run db:seed:dev -- --remove        lock the accounts and take their data out
 //
-// All accounts share one password: DEV_SEED_PASSWORD, or "trustbrick-dev-2026" by default.
+// In production (deploy/README.md) both need --allow-production --allow-remote.
+//
+// All accounts share one password. Locally: DEV_SEED_PASSWORD, or "trustbrick-dev-2026". In
+// production never that: DEV_SEED_PASSWORD if it's at least 16 characters, otherwise a new
+// random one on every run, printed once in the terminal and nowhere else.
 import { createHash, randomBytes } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import pg from "pg";
@@ -19,10 +24,13 @@ try {
   process.loadEnvFile(".env.local");
 } catch {}
 
-// ── Safety: never in production, never against a remote database by accident ──
+const REMOVE = process.argv.includes("--remove");
+const PRODUCTION = process.env.NODE_ENV === "production";
+
+// ── Safety: never in production or against a remote database by accident ──
 const url = process.env.DATABASE_URL ?? "";
-if (process.env.NODE_ENV === "production") {
-  console.error("Refusing to seed development accounts with NODE_ENV=production.");
+if (PRODUCTION && !process.argv.includes("--allow-production")) {
+  console.error("Refusing to touch test accounts with NODE_ENV=production. Pass --allow-production if you really mean it.");
   process.exit(1);
 }
 const host = (() => {
@@ -37,7 +45,13 @@ if (!["127.0.0.1", "localhost"].includes(host) && !process.argv.includes("--allo
   process.exit(1);
 }
 
-const PASSWORD = process.env.DEV_SEED_PASSWORD ?? "trustbrick-dev-2026";
+const PASSWORD = (() => {
+  const given = process.env.DEV_SEED_PASSWORD;
+  if (!PRODUCTION) return given ?? "trustbrick-dev-2026";
+  // On the live site, never the well-known development password.
+  if (given && given.length >= 16 && given !== "trustbrick-dev-2026") return given;
+  return randomBytes(18).toString("base64url");
+})();
 const DOMAIN = "trustbrick.test";
 const DAY = 86_400_000;
 const NOW = Date.now();
@@ -52,6 +66,8 @@ const ACCOUNTS = {
   opsAdmin: { name: "Dev Malhotra", email: `ops.admin@${DOMAIN}` },
   moderator: { name: "Irfan Qureshi", email: `moderator@${DOMAIN}` },
   broker: { name: "Meera Iyer", email: `broker.meera@${DOMAIN}` },
+  manager: { name: "Kavya Reddy", email: `manager.kavya@${DOMAIN}` },
+  operator: { name: "Farhan Ali", email: `operator.farhan@${DOMAIN}` },
   teamLead: { name: "Arjun Rao", email: `agent.arjun@${DOMAIN}` },
   agent: { name: "Priya Nair", email: `agent.priya@${DOMAIN}` },
   independent: { name: "Kabir Sethi", email: `agent.kabir@${DOMAIN}` },
@@ -63,6 +79,66 @@ const ACCOUNTS = {
   host: { name: "Rahul Menon", email: `host.rahul@${DOMAIN}` },
   hostApplicant: { name: "Sneha Kulkarni", email: `host.sneha@${DOMAIN}` },
 };
+
+// Everything the accounts and their organizations did, in dependency order: used before each
+// seed (accounts and organizations stay) and by --remove.
+async function clearWorkspace(q, devUsers, devOrgIds) {
+  const { rows: oldAddresses } = await q(`SELECT address_id AS id FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM platform.notifications WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM crm.visits WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM crm.leads WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM crm.contacts WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM trust.review_cases WHERE organization_id = ANY($1::uuid[])
+             OR agent_profile_id IN (SELECT id FROM orgs.agent_profiles WHERE user_id = ANY($2::uuid[]))`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM stays.conversations WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM stays.bookings WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM marketplace.listings WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  if (oldAddresses.length) await q(`DELETE FROM geography.addresses WHERE id = ANY($1::uuid[])`, [oldAddresses.map((r) => r.id)]);
+  await q(`DELETE FROM trust.reports WHERE reporter_user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM marketplace.saved_properties WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM orgs.admin_invitations WHERE email LIKE $1 OR invited_by = ANY($2::uuid[])`, [`%@${DOMAIN}`, devUsers]);
+  await q(`DELETE FROM orgs.agent_invitations WHERE email LIKE $1 OR invited_by = ANY($2::uuid[])`, [`%@${DOMAIN}`, devUsers]);
+  await q(`DELETE FROM orgs.admin_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM orgs.agent_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM stays.host_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM orgs.teams WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
+  await q(`DELETE FROM orgs.memberships WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM identity.sessions WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+}
+
+// ── --remove: lock every test account and take out what they made ────────────
+if (REMOVE) {
+  const c = new pg.Client({ connectionString: url });
+  await c.connect();
+  const rq = (text, params) => c.query(text, params);
+  try {
+    await rq("BEGIN");
+    const users = (await rq(`SELECT id FROM identity.users WHERE email = ANY($1::text[])`, [Object.values(ACCOUNTS).map((a) => a.email)])).rows.map((r) => r.id);
+    const orgs = (await rq(`SELECT id FROM orgs.organizations WHERE slug LIKE 'dev-%' AND is_sample`)).rows.map((r) => r.id);
+    await clearWorkspace(rq, users, orgs);
+    // The audit trail is append-only, so the accounts stay, locked: no password, no sessions.
+    await rq(`DELETE FROM identity.accounts WHERE user_id = ANY($1::uuid[])`, [users]);
+    await rq(`UPDATE identity.users SET status = 'deactivated', status_reason = 'Test account removed', updated_at = now() WHERE id = ANY($1::uuid[])`, [users]);
+    // The organizations go too, unless something still refers to them; then they're archived.
+    await rq("SAVEPOINT orgs");
+    try {
+      await rq(`DELETE FROM orgs.organizations WHERE id = ANY($1::uuid[])`, [orgs]);
+    } catch {
+      await rq("ROLLBACK TO SAVEPOINT orgs");
+      await rq(`UPDATE orgs.organizations SET status = 'archived', status_reason = 'Test organization removed', updated_at = now() WHERE id = ANY($1::uuid[])`, [orgs]);
+    }
+    await rq("COMMIT");
+    console.log(`Test accounts locked (${users.length}) and their workspace data removed.`);
+  } catch (error) {
+    await rq("ROLLBACK");
+    console.error(error);
+    process.exitCode = 1;
+  } finally {
+    await c.end();
+  }
+  process.exit();
+}
 
 const client = new pg.Client({ connectionString: url });
 await client.connect();
@@ -113,28 +189,7 @@ try {
   const devOrgIds = Object.values(org).map((o) => o.id);
 
   // ── Clear the previous run's workspace data (accounts and organizations stay) ─
-  const { rows: oldAddresses } = await q(`SELECT address_id AS id FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM platform.notifications WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM crm.visits WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM crm.leads WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM crm.contacts WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM trust.review_cases WHERE organization_id = ANY($1::uuid[])
-             OR agent_profile_id IN (SELECT id FROM orgs.agent_profiles WHERE user_id = ANY($2::uuid[]))`, [devOrgIds, devUsers]);
-  await q(`DELETE FROM stays.conversations WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
-  await q(`DELETE FROM stays.bookings WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
-  await q(`DELETE FROM marketplace.listings WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  if (oldAddresses.length) await q(`DELETE FROM geography.addresses WHERE id = ANY($1::uuid[])`, [oldAddresses.map((r) => r.id)]);
-  await q(`DELETE FROM trust.reports WHERE reporter_user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM marketplace.saved_properties WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM orgs.admin_invitations WHERE email LIKE $1 OR invited_by = ANY($2::uuid[])`, [`%@${DOMAIN}`, devUsers]);
-  await q(`DELETE FROM orgs.agent_invitations WHERE email LIKE $1 OR invited_by = ANY($2::uuid[])`, [`%@${DOMAIN}`, devUsers]);
-  await q(`DELETE FROM orgs.admin_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM orgs.agent_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM stays.host_profiles WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM orgs.teams WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
-  await q(`DELETE FROM orgs.memberships WHERE user_id = ANY($1::uuid[])`, [devUsers]);
-  await q(`DELETE FROM identity.sessions WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await clearWorkspace(q, devUsers, devOrgIds);
 
   const roleId = Object.fromEntries((await q(`SELECT code, id FROM orgs.roles WHERE organization_id IS NULL`)).rows.map((r) => [r.code, r.id]));
   async function membership(userId, organizationId, roles, status = "active") {
@@ -182,17 +237,19 @@ try {
     );
   }
   const agent = {};
-  agent.broker = await agentProfile(id.broker, { phone: "+919800000101", rera: "SAMPLE-RERA-AGT-0101", citySlug: "hyderabad", years: 14, status: "active", verification: "verified" });
-  agent.teamLead = await agentProfile(id.teamLead, { phone: "+919800000102", rera: "SAMPLE-RERA-AGT-0102", citySlug: "hyderabad", years: 9, status: "active", verification: "verified" });
-  agent.agent = await agentProfile(id.agent, { phone: "+919800000103", rera: "SAMPLE-RERA-AGT-0103", citySlug: "hyderabad", years: 4, status: "active", verification: "verified",
+  agent.broker = await agentProfile(id.broker, { phone: "+910000000101", rera: "SAMPLE-RERA-AGT-0101", citySlug: "hyderabad", years: 14, status: "active", verification: "verified" });
+  agent.teamLead = await agentProfile(id.teamLead, { phone: "+910000000102", rera: "SAMPLE-RERA-AGT-0102", citySlug: "hyderabad", years: 9, status: "active", verification: "verified" });
+  agent.agent = await agentProfile(id.agent, { phone: "+910000000103", rera: "SAMPLE-RERA-AGT-0103", citySlug: "hyderabad", years: 4, status: "active", verification: "verified",
     bio: "Rentals and resale apartments across Hyderabad's western suburbs. Sample profile for development." });
-  agent.independent = await agentProfile(id.independent, { phone: "+919800000104", rera: null, citySlug: "bengaluru", years: 2, status: "active", verification: "unverified" });
-  agent.suspended = await agentProfile(id.suspendedAgent, { phone: "+919800000105", rera: "SAMPLE-RERA-AGT-0105", citySlug: "pune", years: 6, status: "suspended", verification: "verified",
+  agent.independent = await agentProfile(id.independent, { phone: "+910000000104", rera: null, citySlug: "bengaluru", years: 2, status: "active", verification: "unverified" });
+  agent.suspended = await agentProfile(id.suspendedAgent, { phone: "+910000000105", rera: "SAMPLE-RERA-AGT-0105", citySlug: "pune", years: 6, status: "suspended", verification: "verified",
     reason: "Sample: repeated complaints about unavailable listings (development data)." });
-  agent.applicant = await agentProfile(id.applicant, { phone: "+919800000106", rera: "SAMPLE-RERA-AGT-0106", citySlug: "hyderabad", years: 3, status: "pending", verification: "pending", requestedOrg: org.skyline.id });
+  agent.applicant = await agentProfile(id.applicant, { phone: "+910000000106", rera: "SAMPLE-RERA-AGT-0106", citySlug: "hyderabad", years: 3, status: "pending", verification: "pending", requestedOrg: org.skyline.id });
 
   const m = {};
   m.broker = await membership(id.broker, org.skyline.id, ["owner"]);
+  m.manager = await membership(id.manager, org.skyline.id, ["manager"]);
+  m.operator = await membership(id.operator, org.skyline.id, ["operator"]);
   m.teamLead = await membership(id.teamLead, org.skyline.id, ["supervisor"]);
   m.agent = await membership(id.agent, org.skyline.id, ["agent"]);
   m.independent = await membership(id.independent, org.kabir.id, ["agent"]);
@@ -201,12 +258,12 @@ try {
   const host = {};
   host.rahul = await one(
     `INSERT INTO stays.host_profiles (id, user_id, phone, city_place_id, about, languages, relationship, status, verification_status, approved_by, approved_at, status_changed_at, created_at)
-     VALUES (gen_random_uuid(), $1, '+919800000201', $2, $3, ARRAY['English', 'Hindi', 'Konkani'], 'owner', 'active', 'verified', $4, $5, $5, $6) RETURNING id, reference_id`,
+     VALUES (gen_random_uuid(), $1, '+910000000201', $2, $3, ARRAY['English', 'Hindi', 'Konkani'], 'owner', 'active', 'verified', $4, $5, $5, $6) RETURNING id, reference_id`,
     [id.host, city.north_goa, "I grew up in Goa and host guests in two family homes near the beach. Sample host for development.", id.opsAdmin, ago(60), ago(62)],
   );
   host.sneha = await one(
     `INSERT INTO stays.host_profiles (id, user_id, phone, city_place_id, about, languages, relationship, status, verification_status, created_at)
-     VALUES (gen_random_uuid(), $1, '+919800000202', $2, 'I have a spare room in my Baner flat. Sample applicant for development.', ARRAY['English', 'Marathi'], 'owner', 'pending', 'pending', $3)
+     VALUES (gen_random_uuid(), $1, '+910000000202', $2, 'I have a spare room in my Baner flat. Sample applicant for development.', ARRAY['English', 'Marathi'], 'owner', 'pending', 'pending', $3)
      RETURNING id, reference_id`,
     [id.hostApplicant, city.pune, ago(1)],
   );
@@ -555,7 +612,7 @@ try {
     [`new.admin@${DOMAIN}`, createHash("sha256").update(inviteToken).digest("hex"), ADMIN_PRESETS.support.permissions, id.superadmin]);
   const agentInviteToken = randomBytes(32).toString("base64url");
   await q(`INSERT INTO orgs.agent_invitations (id, email, name, phone, city_place_id, rera_agent_number, experience_years, organization_id, role_code, token_hash, invited_by, expires_at)
-           VALUES (gen_random_uuid(), $1, 'Dev Agent Invitee', '+919800000199', $2, 'SAMPLE-RERA-AGT-0199', 2, $3, 'agent', $4, $5, now() + interval '72 hours')`,
+           VALUES (gen_random_uuid(), $1, 'Dev Agent Invitee', '+910000000199', $2, 'SAMPLE-RERA-AGT-0199', 2, $3, 'agent', $4, $5, now() + interval '72 hours')`,
     [`new.agent@${DOMAIN}`, city.hyderabad, org.skyline.id, createHash("sha256").update(agentInviteToken).digest("hex"), id.opsAdmin]);
 
   const note = (userId, type, title, link) =>
@@ -583,7 +640,13 @@ try {
   await q("COMMIT");
 
   const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-  console.log("\nDevelopment workspaces ready. Every account's password:", PASSWORD, "\n");
+  if (PRODUCTION) {
+    console.log("\nTest accounts ready on the live site. Every account's password (shown only this once; a new one on every run):\n");
+    console.log(`    ${PASSWORD}\n`);
+    console.log("Keep it private: it opens a SuperAdmin account. Take them out again with --remove.\n");
+  } else {
+    console.log("\nDevelopment workspaces ready. Every account's password:", PASSWORD, "\n");
+  }
   console.table(
     Object.entries(ACCOUNTS).map(([key, a]) => ({
       account: a.email,
@@ -592,6 +655,8 @@ try {
         opsAdmin: `Admin (operations) ${staff.opsAdmin.reference_id}`,
         moderator: `Admin (moderation) ${staff.moderator.reference_id}`,
         broker: `Owner, Sample Skyline Realty ${agent.broker.reference_id}`,
+        manager: "Manager, Sample Skyline Realty",
+        operator: "Operator, Sample Skyline Realty",
         teamLead: `Supervisor, Sample Skyline Realty ${agent.teamLead.reference_id}`,
         agent: `Agent, Sample Skyline Realty ${agent.agent.reference_id}`,
         independent: `Independent agent ${agent.independent.reference_id}`,
