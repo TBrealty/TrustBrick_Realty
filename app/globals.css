@@ -682,6 +682,66 @@ html:has(dialog.photo-viewer[open]) {
   color: inherit;
 }
 
+/* ── Page scrollbar (components/navigation/PageScrollbar.tsx) ──────────────
+   On mouse and trackpad screens the browser's own page scrollbar is hidden (only once JavaScript
+   runs, so the page is never left without one) and a slim brick handle floats over the right edge
+   instead, above the header, so the nav bar runs the full width beneath it. Phones and tablets
+   keep their own overlay scrollbars. Scrolling areas inside the page keep theirs. */
+.page-scrollbar {
+  display: none;
+}
+@media (pointer: fine) {
+  html.js {
+    scrollbar-width: none;
+  }
+  html.js::-webkit-scrollbar {
+    display: none;
+  }
+  .page-scrollbar {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 3px;
+    z-index: 70;
+    width: 6px;
+    border-radius: 999px;
+    background: var(--brick);
+    opacity: 0.85;
+    cursor: grab;
+    touch-action: none;
+    will-change: transform;
+    transition:
+      width 0.2s var(--ease-smooth),
+      right 0.2s var(--ease-smooth),
+      background-color 0.2s var(--ease-smooth),
+      opacity 0.2s var(--ease-smooth);
+  }
+  .page-scrollbar[hidden] {
+    display: none;
+  }
+  /* A wider, brighter handle under the pointer; the grab area reaches past its visible edge. */
+  .page-scrollbar::before {
+    content: "";
+    position: absolute;
+    inset: 0 -5px;
+  }
+  .page-scrollbar:hover,
+  .page-scrollbar[data-dragging] {
+    width: 9px;
+    right: 2px;
+    background: var(--brick-bright);
+    opacity: 1;
+  }
+  .page-scrollbar[data-dragging] {
+    cursor: grabbing;
+  }
+}
+@media print {
+  .page-scrollbar {
+    display: none !important;
+  }
+}
+
 /* Generic dropdown entrance, shared by menus that are not portalled */
 .menu-in {
   animation: menu-in 0.2s var(--ease-smooth) both;

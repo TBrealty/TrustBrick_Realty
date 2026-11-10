@@ -1,6 +1,7 @@
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { PageScrollbar } from "@/components/navigation/PageScrollbar";
 import { PlansPromo } from "@/components/subscriptions/PlansPromo";
 import { site } from "@/lib/site";
 import "./globals.css";
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
+        <PageScrollbar />
         {/* Once after each log-in: the plans pop-up. */}
         <PlansPromo />
       </body>
