@@ -14,6 +14,7 @@
 import pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { PLACES, seedReference } from "./reference.mjs";
+import { addModel, addTour, modelFor, panoramaMedia, roomsFor } from "./tours.mjs";
 
 try {
   process.loadEnvFile(".env.local");
@@ -486,6 +487,33 @@ async function main() {
         [listingId, space, guests, Math.max(1, bedrooms + int(0, 1)), weekend > price ? weekend : null, cleaning || null, minNights, pick([14, 30, 30]), instant,
           pick(["flexible", "moderate", "moderate", "strict"]), pets, "Quiet after 10 pm. No parties. Please take your shoes off inside."]);
       counts.stays++;
+    }
+
+    // ── 360° tours on some of them (Plus members see them; everyone sees there is one) ──
+    // A separate random stream, so the listings above come out the same with or without tours.
+    const tourRand = mulberry32(360);
+    const tourPick = (list) => list[Math.floor(tourRand() * list.length)];
+    const panoramaIds = await panoramaMedia(q);
+    const { rows: published } = await q(
+      `SELECT p.id AS property_id, pt.code AS kind, pt.category, l.transaction_type
+         FROM marketplace.listings l JOIN real_estate.properties p ON p.id = l.property_id JOIN real_estate.property_types pt ON pt.id = p.property_type_id
+        WHERE l.organization_id = ANY($1::uuid[]) AND l.status = 'published' AND (pt.category = 'residential' OR l.transaction_type = 'pg')
+        ORDER BY l.id`,
+      [Object.values(orgs)],
+    );
+    const every = { sale: 5, rent: 3, stay: 3, pg: 6 };
+    const seen = {};
+    for (const r of published) {
+      const n = (seen[r.transaction_type] = (seen[r.transaction_type] ?? 0) + 1);
+      if ((n - 1) % (every[r.transaction_type] ?? 99) !== 0) continue;
+      await addTour(q, panoramaIds, r.property_id, roomsFor(r.transaction_type === "pg" ? "pg" : r.kind, tourPick));
+      counts.tours = (counts.tours ?? 0) + 1;
+      // Every other home with a tour also gets a 3D model, so both kinds of tour are on show.
+      const model = r.transaction_type === "pg" ? null : modelFor(r.kind);
+      if (model && counts.tours % 2 === 1) {
+        await addModel(q, panoramaIds, r.property_id, model);
+        counts.models = (counts.models ?? 0) + 1;
+      }
     }
 
     await q("COMMIT");
