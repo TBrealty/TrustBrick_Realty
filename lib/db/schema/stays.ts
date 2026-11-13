@@ -5,7 +5,7 @@ import { places } from "./geography";
 import { users } from "./identity";
 import { listings } from "./marketplace";
 import { organizations } from "./orgs";
-import { BOOKING_STATUSES, CANCELLATION_POLICIES, MESSAGE_MAX_LENGTH, MESSAGE_SENDER_ROLES, SPACE_TYPES } from "../../vocab";
+import { BOOKING_STATUSES, CANCELLATION_POLICIES, MESSAGE_MAX_LENGTH, MESSAGE_SENDER_ROLES, PAYMENT_MODES, SPACE_TYPES } from "../../vocab";
 import { properties } from "./real-estate";
 
 export { BOOKING_STATUSES, type BookingStatus, CANCELLATION_POLICIES, HOLDING_STATUSES, SPACE_TYPES } from "../../vocab";
@@ -164,6 +164,8 @@ export const bookings = stays.table(
     total: money("total").notNull(),
     currency: text("currency").notNull().default("INR"),
     paymentMode: text("payment_mode").notNull().default("pay_at_property"),
+    /** The stay's instant-book setting when booked: whether paying confirms it, or the host decides. */
+    instantBook: boolean("instant_book").notNull().default(false),
     status: text("status").notNull(),
     guestName: text("guest_name").notNull(),
     guestPhone: text("guest_phone").notNull(),
@@ -190,8 +192,8 @@ export const bookings = stays.table(
     check("bookings_dates_check", sql`NOT isempty("dates") AND lower_inc("dates") AND NOT upper_inc("dates") AND upper("dates") - lower("dates") = "nights"`),
     check("bookings_guests_check", sql`"adults" BETWEEN 1 AND 30 AND "children" BETWEEN 0 AND 30`),
     check("bookings_money_check", sql`"subtotal" > 0 AND "cleaning_fee" >= 0 AND "total" = "subtotal" + "cleaning_fee"`),
-    check("bookings_payment_check", sql`"payment_mode" IN ('pay_at_property')`),
-    check("bookings_cancelled_by_check", sql`(("status" = 'cancelled') = ("cancelled_by" IS NOT NULL)) AND ("cancelled_by" IS NULL OR "cancelled_by" IN ('guest', 'host', 'admin'))`),
+    check("bookings_payment_check", inList("payment_mode", PAYMENT_MODES)),
+    check("bookings_cancelled_by_check", sql`(("status" = 'cancelled') = ("cancelled_by" IS NOT NULL)) AND ("cancelled_by" IS NULL OR "cancelled_by" IN ('guest', 'host', 'admin', 'system'))`),
     check("bookings_phone_check", sql`"guest_phone" ~ '^[+]?[0-9]{10,15}$'`),
     check("bookings_message_check", sql`"guest_message" IS NULL OR char_length("guest_message") <= 1000`),
   ],

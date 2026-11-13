@@ -26,6 +26,8 @@ type Props = {
   defaultName: string;
   /** Why this stay can't be booked by this visitor, if it can't. */
   blockedReason: string | null;
+  /** Guests pay online when they book: the button goes to checkout. */
+  payOnline?: boolean;
 };
 
 const fieldClass =
@@ -198,6 +200,25 @@ export function BookingPanel(p: Props) {
         <Link href={loginHref} className="btn btn-dark w-full">
           <span>Log in to book</span>
         </Link>
+      ) : p.payOnline ? (
+        <div className="space-y-2">
+          {current?.ok ? (
+            <Link
+              href={`/listings/${p.referenceId}/checkout?${new URLSearchParams({ check_in: checkIn, check_out: checkOut, adults: String(adults), children: String(children), ...(pets ? { pets: "1" } : {}) })}`}
+              className="btn btn-dark w-full"
+            >
+              <span>{p.instantBook ? "Book now" : "Request to book"}</span>
+            </Link>
+          ) : (
+            <button type="button" className="btn btn-dark w-full" disabled>
+              <span>{p.instantBook ? "Book now" : "Request to book"}</span>
+            </button>
+          )}
+          <p className="text-[0.75rem] text-stone-deep">
+            {p.instantBook ? "You pay securely online and your stay is confirmed straight away." : "You pay online; the amount is held, not charged, until the host accepts."} No fees
+            on top.
+          </p>
+        </div>
       ) : !booking ? (
         <button type="button" className="btn btn-dark w-full" disabled={!current?.ok} onClick={() => setBooking(true)}>
           <span>{p.instantBook ? "Book now" : "Request to book"}</span>

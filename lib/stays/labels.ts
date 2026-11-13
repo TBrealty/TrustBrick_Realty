@@ -10,13 +10,20 @@ export const SPACE_TYPE_LABELS = {
 /** How long a host has to answer a booking request before it expires. */
 export const REQUEST_HOURS = 24;
 
+/**
+ * Cancellation policies. A guest who cancels before the cut-off (check-in time on the check-in
+ * day, less `freeUntilHours`) gets everything back; after it, `lateRefundPercent` of the total.
+ * The refund itself is worked out in lib/payments/rules.ts.
+ */
 export const CANCELLATION_LABELS = {
-  flexible: { label: "Flexible", rule: "Free cancellation until 24 hours before check-in.", freeUntilHours: 24 },
-  moderate: { label: "Moderate", rule: "Free cancellation until 5 days before check-in.", freeUntilHours: 5 * 24 },
-  strict: { label: "Strict", rule: "Free cancellation within 48 hours of booking, if check-in is at least 14 days away.", freeUntilHours: 14 * 24 },
+  flexible: { label: "Flexible", rule: "Free cancellation until 24 hours before check-in.", late: "After that, 50% back.", freeUntilHours: 24, lateRefundPercent: 50 },
+  moderate: { label: "Moderate", rule: "Free cancellation until 5 days before check-in.", late: "After that, 50% back.", freeUntilHours: 5 * 24, lateRefundPercent: 50 },
+  strict: { label: "Strict", rule: "Free cancellation until 14 days before check-in.", late: "After that, no refund.", freeUntilHours: 14 * 24, lateRefundPercent: 0 },
 } as const;
 
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
+  pending_payment: "Awaiting payment",
+  abandoned: "Not completed",
   requested: "Awaiting host",
   confirmed: "Confirmed",
   declined: "Declined",
@@ -28,6 +35,8 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
 };
 
 export const BOOKING_STATUS_TONES: Record<BookingStatus, "neutral" | "info" | "success" | "warning" | "danger"> = {
+  pending_payment: "neutral",
+  abandoned: "neutral",
   requested: "warning",
   confirmed: "success",
   declined: "danger",

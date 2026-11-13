@@ -67,7 +67,7 @@ describe("the calculation", () => {
 
   it("starts with Trustbrick's defaults", async () => {
     const d = await ratesFor(null);
-    expect([d.sale.basis, d.sale.percent, d.stay.basis, d.stay.percent]).toEqual(["brokerage", 20, "deal_value", 10]);
+    expect([d.sale.basis, d.sale.percent, d.stay.basis, d.stay.percent]).toEqual(["brokerage", 20, "deal_value", 12]);
   });
 });
 
@@ -142,7 +142,7 @@ describe("charges", () => {
     const e = await one<{ deal_value: string; amount: string; service: string }>(sql`
       SELECT e.deal_value, e.amount, e.service FROM finance.commission_entries e JOIN stays.bookings b ON b.id = e.booking_id WHERE b.reference_id = ${referenceId}`);
     const total = await one<{ total: string }>(sql`SELECT total FROM stays.bookings WHERE reference_id = ${referenceId}`);
-    expect([e.service, Number(e.deal_value), Number(e.amount)]).toEqual(["stay", Number(total.total), Number(total.total) * 0.1]);
+    expect([e.service, Number(e.deal_value), Number(e.amount)]).toEqual(["stay", Number(total.total), Number(total.total) * 0.12]);
     // However its status moves next, the booking is charged once.
     await transitionBooking(host, referenceId, "complete", null, ctx);
     const n = await one<{ n: number }>(sql`SELECT count(*)::int AS n FROM finance.commission_entries e JOIN stays.bookings b ON b.id = e.booking_id WHERE b.reference_id = ${referenceId}`);

@@ -16,11 +16,15 @@ import { log } from "@/lib/log";
 import { isReferenceId, normalizeReferenceId } from "@/lib/reference";
 import { BOOKING_ACTIONS, type BookingAction, type BookingActionDef, bookingActionsFor, dateRuleMet, todayInIndia } from "@/lib/stays/booking-lifecycle";
 import { BOOKING_STATUS_LABELS, CANCELLATION_LABELS, REQUEST_HOURS, nightsLabel } from "@/lib/stays/labels";
-import { BOOKING_STATUSES, type BookingStatus } from "@/lib/vocab";
+import { paymentDriver } from "@/lib/payments";
+import { CHECKOUT_HOLD_MINUTES } from "@/lib/payments/rules";
+import { BOOKING_STATUSES, type BookingStatus, type PaymentMode } from "@/lib/vocab";
 import { type AuditEvent, type PersonActor, type RequestContext, audit } from "../audit";
 import { chargeBooking } from "../commission";
 import { type NotificationType, notify } from "../notifications";
 import { type Page, pageParams } from "../pagination";
+import { getSetting } from "../settings";
+import { type MoneyOutcome, moneyOnTransition } from "./payment-ledger";
 
 /**
  * Homestay bookings (docs/stays/README.md §4). Guests pay the host at the property, so a
@@ -34,6 +38,10 @@ import { type Page, pageParams } from "../pagination";
 
 type Row = Record<string, unknown>;
 const HOLDING = sql`('confirmed', 'checked_in', 'completed')`;
+/** A booking holding its dates: agreed, or an instant-book checkout still being paid for. */
+const HOLDS = sql`(b.status IN ${HOLDING} OR (b.status = 'pending_payment' AND b.instant_book AND b.expires_at > now()))`;
+/** Bookings that never happened: an unpaid checkout. Left out of hosts' and guests' lists. */
+const UNBOOKED = sql`b.status NOT IN ('pending_payment', 'abandoned')`;
 const MAX_ADVANCE_DAYS = 365;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 const money = (v: number) => formatPrice(v, { compact: false });
@@ -42,7 +50,7 @@ const likeEscape = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 // ── The stay being booked ────────────────────────────────────────────────────
 
-type Stay = {
+export type Stay = {
   listingId: string;
   referenceId: string;
   title: string;
@@ -111,7 +119,10 @@ async function loadStay(tx: DbOrTx, referenceId: string, lock = false): Promise<
   };
 }
 
-/** Requests the host didn't answer in time become `expired`. Derived on read and write, so no scheduler is needed. */
+/**
+ * Requests the host didn't answer in time become `expired`, and checkouts not paid in time
+ * `abandoned`. Derived on read and write; the payments job releases any money they held.
+ */
 export async function expireStaleRequests(tx: DbOrTx, where: SQL = sql`TRUE`) {
   await tx.execute(sql`
     WITH expired AS (
@@ -120,6 +131,13 @@ export async function expireStaleRequests(tx: DbOrTx, where: SQL = sql`TRUE`) {
       RETURNING b.id)
     INSERT INTO stays.booking_events (id, booking_id, from_status, to_status, action, actor_role)
     SELECT gen_random_uuid(), id, 'requested', 'expired', 'expire', 'system' FROM expired`);
+  await tx.execute(sql`
+    WITH lapsed AS (
+      UPDATE stays.bookings b SET status = 'abandoned', status_reason = 'The payment wasn''t completed in time.', updated_at = now()
+       WHERE b.status = 'pending_payment' AND b.expires_at <= now() AND ${where}
+      RETURNING b.id)
+    INSERT INTO stays.booking_events (id, booking_id, from_status, to_status, action, actor_role)
+    SELECT gen_random_uuid(), id, 'pending_payment', 'abandoned', 'payment_timeout', 'system' FROM lapsed`);
 }
 
 // ── Quote: dates, guests and the price, night by night ───────────────────────
@@ -158,7 +176,7 @@ export type Quote =
 async function unavailable(tx: DbOrTx, listingId: string, checkIn: string, checkOut: string, exceptBookingId?: string) {
   const { rows } = await tx.execute(sql`
     SELECT
-      EXISTS (SELECT 1 FROM stays.bookings b WHERE b.listing_id = ${listingId} AND b.status IN ${HOLDING}
+      EXISTS (SELECT 1 FROM stays.bookings b WHERE b.listing_id = ${listingId} AND ${HOLDS}
                  AND b.dates && daterange(${checkIn}::date, ${checkOut}::date) ${exceptBookingId ? sql`AND b.id <> ${exceptBookingId}` : sql``}) AS booked,
       EXISTS (SELECT 1 FROM stays.stay_blocks k WHERE k.listing_id = ${listingId} AND k.dates && daterange(${checkIn}::date, ${checkOut}::date)) AS blocked`);
   const r = rows[0] as Row;
@@ -198,8 +216,11 @@ async function computeQuote(tx: DbOrTx, stay: Stay, input: StayRequest, options:
   return { ok: true, checkIn: input.checkIn, checkOut: input.checkOut, nights, nightly, subtotal, cleaningFee: stay.cleaningFee, total: subtotal + stay.cleaningFee, instantBook: stay.instantBook };
 }
 
-/** The live price for the booking panel. Public: anyone may ask what a stay costs. */
-export async function quoteStay(referenceId: string, raw: unknown): Promise<Quote> {
+/**
+ * The live price for the booking panel. Public: anyone may ask what a stay costs. For a guest
+ * (`guestUserId`), their own unpaid checkout for these dates doesn't count against them.
+ */
+export async function quoteStay(referenceId: string, raw: unknown, guestUserId?: string): Promise<Quote> {
   const parsed = stayRequestSchema.safeParse(raw);
   if (!parsed.success) {
     const [first] = parsed.error.issues;
@@ -207,7 +228,14 @@ export async function quoteStay(referenceId: string, raw: unknown): Promise<Quot
   }
   const stay = await loadStay(db, normalizeReferenceId(referenceId));
   if (!stay) return { ok: false, message: "This stay no longer exists." };
-  return computeQuote(db, stay, parsed.data);
+  let exceptBookingId: string | undefined;
+  if (guestUserId) {
+    const { rows } = await db.execute(sql`
+      SELECT id FROM stays.bookings WHERE listing_id = ${stay.listingId} AND guest_user_id = ${guestUserId} AND status = 'pending_payment' AND expires_at > now()
+         AND dates = daterange(${parsed.data.checkIn}::date, ${parsed.data.checkOut}::date) LIMIT 1`);
+    exceptBookingId = (rows[0] as Row | undefined)?.id as string | undefined;
+  }
+  return computeQuote(db, stay, parsed.data, { exceptBookingId });
 }
 
 /** Held and blocked dates for the next months, for the booking panel's calendar. No guest details. */
@@ -218,7 +246,7 @@ export async function unavailableDates(referenceId: string, fromDate = todayInIn
     SELECT to_char(lower(r), 'YYYY-MM-DD') AS from_date, to_char(upper(r), 'YYYY-MM-DD') AS to_date FROM (
       SELECT b.dates * daterange(${fromDate}::date, ${to}::date) AS r FROM stays.bookings b
         JOIN marketplace.listings l ON l.id = b.listing_id
-       WHERE l.reference_id = ${referenceId} AND b.status IN ${HOLDING} AND b.dates && daterange(${fromDate}::date, ${to}::date)
+       WHERE l.reference_id = ${referenceId} AND ${HOLDS} AND b.dates && daterange(${fromDate}::date, ${to}::date)
       UNION ALL
       SELECT k.dates * daterange(${fromDate}::date, ${to}::date) FROM stays.stay_blocks k
         JOIN marketplace.listings l ON l.id = k.listing_id
@@ -242,125 +270,210 @@ export const bookingSchema = stayRequestSchema.extend({
   agree: z.preprocess((v) => v === "on" || v === true, z.literal(true, { message: "Agree to the house rules and cancellation policy" })),
 });
 
-type Guest = { userId: string; email: string };
+export type Guest = { userId: string; email: string };
+export type BookingInput = z.infer<typeof bookingSchema>;
 
-async function writeEvent(tx: Tx, bookingId: string, from: BookingStatus | null, to: BookingStatus, action: string, actorUserId: string | null, actorRole: string, note?: string | null) {
+export async function writeEvent(tx: Tx, bookingId: string, from: BookingStatus | null, to: BookingStatus, action: string, actorUserId: string | null, actorRole: string, note?: string | null) {
   await tx.execute(sql`
     INSERT INTO stays.booking_events (id, booking_id, from_status, to_status, action, note, actor_user_id, actor_role)
     VALUES (gen_random_uuid(), ${bookingId}, ${from}, ${to}, ${action}, ${note ?? null}, ${actorUserId}, ${actorRole})`);
 }
 
-const isOverlap = (e: unknown) => /bookings_no_overlap/.test(String((e as { cause?: { constraint?: string } })?.cause?.constraint ?? (e as Error)?.message ?? ""));
+export const isOverlap = (e: unknown) => /bookings_no_overlap/.test(String((e as { cause?: { constraint?: string } })?.cause?.constraint ?? (e as Error)?.message ?? ""));
 
+/** Is online payment switched on, with a provider to take it? */
+export async function paymentsOnline(tx: DbOrTx = db) {
+  return (await getSetting("payments.stays_online", tx)) && paymentDriver() !== null;
+}
+
+export type Placed = {
+  bookingId: string;
+  referenceId: string;
+  status: BookingStatus;
+  stay: Stay;
+  quote: Extract<Quote, { ok: true }>;
+  guestReferenceId: string;
+  /** An unpaid checkout for the same dates, picked up again. */
+  reused: boolean;
+};
+
+/**
+ * Checks, prices and writes a booking. Paid at the property, it is requested or confirmed at
+ * once. Paid online, it waits for the payment (pending_payment), holding an instant-book stay's
+ * dates for 15 minutes; lib/services/stays/payments.ts takes it from there.
+ */
+export async function placeBooking(tx: Tx, guest: Guest, referenceId: string, input: BookingInput, mode: PaymentMode): Promise<Placed> {
+  const account = await tx.execute(sql`SELECT reference_id, email_verified, status FROM identity.users WHERE id = ${guest.userId}`);
+  const a = account.rows[0] as Row | undefined;
+  if (!a || a.status !== "active") throw new AppError("FORBIDDEN");
+  if (!a.email_verified) throw new AppError("FORBIDDEN", "Confirm your email before booking.");
+
+  const stay = await loadStay(tx, normalizeReferenceId(referenceId), true);
+  if (!stay) throw notFound("This stay no longer exists.");
+  if (stay.hostUserId === guest.userId) throw new AppError("FORBIDDEN", "You can't book your own stay.");
+  await expireStaleRequests(tx, sql`b.listing_id = ${stay.listingId}`);
+
+  // The guest's own unpaid checkout for these dates is picked up again; one for other dates is dropped.
+  const mine = await tx.execute(sql`
+    SELECT id, reference_id, status, to_char(lower(dates), 'YYYY-MM-DD') AS check_in, to_char(upper(dates), 'YYYY-MM-DD') AS check_out, adults, children, pets
+      FROM stays.bookings
+     WHERE listing_id = ${stay.listingId} AND guest_user_id = ${guest.userId} AND status IN ('pending_payment', 'requested', 'confirmed')
+       AND dates && daterange(${input.checkIn}::date, ${input.checkOut}::date)`);
+  for (const d of mine.rows as Row[]) {
+    if (d.status !== "pending_payment") throw conflict(`You already have a booking for these dates (${d.reference_id}).`);
+    const same = d.check_in === input.checkIn && d.check_out === input.checkOut && Number(d.adults) === input.adults && Number(d.children) === input.children && Boolean(d.pets) === input.pets;
+    if (same && mode === "online") {
+      const quote = await computeQuote(tx, stay, input, { exceptBookingId: String(d.id) });
+      if (!quote.ok) throw invalid(quote.message, quote.field ? { [quote.field]: quote.message } : undefined);
+      await tx.execute(sql`UPDATE stays.bookings SET guest_name = ${input.name}, guest_phone = ${input.phone}, guest_message = ${input.message ?? null}, updated_at = now() WHERE id = ${String(d.id)}`);
+      return { bookingId: String(d.id), referenceId: String(d.reference_id), status: "pending_payment", stay, quote, guestReferenceId: String(a.reference_id), reused: true };
+    }
+    await tx.execute(sql`UPDATE stays.bookings SET status = 'abandoned', status_reason = 'Replaced by a new booking for other dates.', updated_at = now() WHERE id = ${String(d.id)}`);
+    await writeEvent(tx, String(d.id), "pending_payment", "abandoned", "replaced", guest.userId, "guest");
+  }
+
+  const quote = await computeQuote(tx, stay, input);
+  if (!quote.ok) throw invalid(quote.message, quote.field ? { [quote.field]: quote.message } : undefined);
+
+  const status: BookingStatus = mode === "online" ? "pending_payment" : stay.instantBook ? "confirmed" : "requested";
+  // A request expires after 24 hours, or at the end of the check-in day if that comes sooner. A checkout, after 15 minutes.
+  const expires =
+    status === "pending_payment"
+      ? sql`now() + ${`${CHECKOUT_HOLD_MINUTES} minutes`}::interval`
+      : status === "requested"
+        ? sql`least(now() + ${`${REQUEST_HOURS} hours`}::interval, ((${quote.checkIn}::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'))`
+        : sql`NULL`;
+  const created = await tx.execute(sql`
+    INSERT INTO stays.bookings (id, listing_id, property_id, organization_id, host_user_id, guest_user_id, dates, nights, adults, children, pets,
+                                nightly_breakdown, subtotal, cleaning_fee, total, payment_mode, instant_book, status, guest_name, guest_phone, guest_message,
+                                cancellation_policy, check_in_time, check_out_time, expires_at, confirmed_at)
+    VALUES (gen_random_uuid(), ${stay.listingId}, ${stay.propertyId}, ${stay.organizationId}, ${stay.hostUserId}, ${guest.userId},
+            daterange(${quote.checkIn}::date, ${quote.checkOut}::date), ${quote.nights}, ${input.adults}, ${input.children}, ${input.pets},
+            ${JSON.stringify(quote.nightly)}::jsonb, ${quote.subtotal}, ${quote.cleaningFee}, ${quote.total}, ${mode}, ${stay.instantBook}, ${status}, ${input.name}, ${input.phone},
+            ${input.message ?? null}, ${stay.cancellationPolicy}, ${stay.checkInTime}::time, ${stay.checkOutTime}::time, ${expires},
+            ${status === "confirmed" ? sql`now()` : sql`NULL`})
+    RETURNING id, reference_id`);
+  const booking = created.rows[0] as Row;
+  const bookingId = String(booking.id);
+  await writeEvent(tx, bookingId, null, status, status === "pending_payment" ? "checkout" : status === "confirmed" ? "instant_book" : "request", guest.userId, "guest", input.message);
+  return { bookingId, referenceId: String(booking.reference_id), status, stay, quote, guestReferenceId: String(a.reference_id), reused: false };
+}
+
+/**
+ * A booking has been made (paid for, when paid online): the audit entry and the host's
+ * notification, inside the transaction. Returns what the emails need.
+ */
+export async function announceBooking(tx: Tx, bookingId: string, ctx: RequestContext, extra: Record<string, unknown> = {}) {
+  const { rows } = await tx.execute(sql`
+    SELECT b.id, b.reference_id, b.status, b.organization_id, b.host_user_id, b.guest_user_id, b.guest_name, b.guest_message, b.adults, b.children, b.total, b.payment_mode,
+           to_char(lower(b.dates), 'YYYY-MM-DD') AS check_in, to_char(upper(b.dates), 'YYYY-MM-DD') AS check_out, b.nights,
+           l.reference_id AS listing_ref, l.title, loc.name AS locality, gu.email AS guest_email, gu.reference_id AS guest_ref, hu.email AS host_email
+      FROM stays.bookings b
+      JOIN marketplace.listings l ON l.id = b.listing_id
+      JOIN real_estate.properties p ON p.id = b.property_id
+      JOIN geography.addresses ad ON ad.id = p.address_id
+      JOIN geography.places loc ON loc.id = ad.place_id
+      JOIN identity.users gu ON gu.id = b.guest_user_id
+      JOIN identity.users hu ON hu.id = b.host_user_id
+     WHERE b.id = ${bookingId}`);
+  const b = rows[0] as Row;
+  const ref = String(b.reference_id);
+  const status = b.status as BookingStatus;
+  const person: PersonActor = { kind: "person", userId: String(b.guest_user_id), referenceId: String(b.guest_ref), role: "guest" };
+  await audit(
+    tx,
+    person,
+    {
+      event: "BOOKING_CREATED",
+      target: { type: "booking", id: bookingId, referenceId: ref },
+      organizationId: String(b.organization_id),
+      metadata: { listing: b.listing_ref, status, checkIn: b.check_in, checkOut: b.check_out, total: Number(b.total), paymentMode: b.payment_mode, ...extra },
+    },
+    ctx,
+  );
+  await notify(tx, [String(b.host_user_id)], {
+    type: status === "confirmed" ? "booking_confirmed" : "booking_requested",
+    title: status === "confirmed" ? `New booking ${ref}: ${formatDay(String(b.check_in))} – ${formatDay(String(b.check_out))}` : `${b.guest_name} asks to book ${formatDay(String(b.check_in))} – ${formatDay(String(b.check_out))}`,
+    body: String(b.title),
+    link: `/bookings/${ref}`,
+  });
+  return {
+    referenceId: ref,
+    status,
+    online: b.payment_mode === "online",
+    title: String(b.title),
+    locality: String(b.locality),
+    guestName: String(b.guest_name),
+    guests: Number(b.adults) + Number(b.children),
+    total: Number(b.total),
+    checkIn: String(b.check_in),
+    checkOut: String(b.check_out),
+    nights: Number(b.nights),
+    guestEmail: String(b.guest_email),
+    hostEmail: (b.host_email as string) ?? null,
+  };
+}
+
+/** The emails for a new booking, sent after the transaction commits. */
+export function emailNewBooking(n: Awaited<ReturnType<typeof announceBooking>>) {
+  const dates = `${formatDay(n.checkIn)} – ${formatDay(n.checkOut)} (${nightsLabel(n.nights)})`;
+  const confirmed = n.status === "confirmed";
+  void Promise.all([
+    n.hostEmail
+      ? sendEmail(
+          bookingMessage(n.hostEmail, {
+            subject: confirmed ? `New booking for ${n.title}` : `Booking request for ${n.title}`,
+            heading: confirmed ? "You have a new booking" : "A guest wants to stay",
+            lines: [
+              `${n.guestName} ${confirmed ? "booked" : "asks to book"} ${n.title} for ${dates}, ${n.guests} guest(s).`,
+              n.online
+                ? `Total ${money(n.total)}, ${confirmed ? "paid online. You're paid a day after check-in, less Trustbrick's commission." : "held on the guest's card or UPI. It's taken only if you accept."}`
+                : `Total ${money(n.total)}, paid to you at the property.`,
+              confirmed ? "The dates are now blocked on your calendar." : `Accept or decline within ${REQUEST_HOURS} hours, or the request expires.`,
+            ],
+            action: { label: "Open the booking", url: url(`/bookings/${n.referenceId}`) },
+          }),
+        )
+      : null,
+    sendEmail(
+      bookingMessage(n.guestEmail, {
+        subject: confirmed ? `Booked: ${n.title}` : `Request sent: ${n.title}`,
+        heading: confirmed ? "Your stay is confirmed" : "Your request is with the host",
+        lines: [
+          `${n.title}, ${n.locality}. ${dates}.`,
+          n.online
+            ? confirmed
+              ? `You paid ${money(n.total)}. Your receipt is on your trip page.`
+              : `${money(n.total)} is on hold, not charged. It's taken only if the host accepts, and released if they don't.`
+            : `Total ${money(n.total)}, paid to the host at the property.`,
+          confirmed ? "The exact address and the host's phone number are on your trip page." : `The host has ${REQUEST_HOURS} hours to respond. We'll email you either way.`,
+        ],
+        action: { label: "View your trip", url: url(`/account/trips/${n.referenceId}`) },
+      }),
+    ),
+  ]).catch((e) => log.error("email.booking_failed", { error: String(e) }));
+}
+
+/** A guest books, paying the host at the property (online payments switched off). */
 export async function createBooking(guest: Guest, referenceId: string, raw: unknown, ctx: RequestContext): Promise<{ referenceId: string; status: BookingStatus }> {
   const parsed = bookingSchema.safeParse(raw);
   if (!parsed.success) throw invalid("Please check the highlighted fields.", fieldErrorsFrom(parsed.error));
   const input = parsed.data;
+  if (await paymentsOnline()) throw conflict("Stays are now paid online when you book. Please update the app, or book on the website.");
   const limited = await limit([{ key: `booking:user:${guest.userId}`, rule: RULES.bookingByUser }]);
   if (limited.limited) throw new AppError("RATE_LIMITED");
 
-  const result = await db
+  const announced = await db
     .transaction(async (tx) => {
-      const account = await tx.execute(sql`SELECT reference_id, email_verified, status FROM identity.users WHERE id = ${guest.userId}`);
-      const a = account.rows[0] as Row | undefined;
-      if (!a || a.status !== "active") throw new AppError("FORBIDDEN");
-      if (!a.email_verified) throw new AppError("FORBIDDEN", "Confirm your email before booking.");
-
-      const stay = await loadStay(tx, normalizeReferenceId(referenceId), true);
-      if (!stay) throw notFound("This stay no longer exists.");
-      if (stay.hostUserId === guest.userId) throw new AppError("FORBIDDEN", "You can't book your own stay.");
-      await expireStaleRequests(tx, sql`b.listing_id = ${stay.listingId}`);
-
-      const quote = await computeQuote(tx, stay, input);
-      if (!quote.ok) throw invalid(quote.message, quote.field ? { [quote.field]: quote.message } : undefined);
-
-      const duplicate = await tx.execute(sql`
-        SELECT reference_id FROM stays.bookings
-         WHERE listing_id = ${stay.listingId} AND guest_user_id = ${guest.userId} AND status IN ('requested', 'confirmed')
-           AND dates && daterange(${quote.checkIn}::date, ${quote.checkOut}::date) LIMIT 1`);
-      if (duplicate.rows[0]) throw conflict(`You already have a booking for these dates (${(duplicate.rows[0] as Row).reference_id}).`);
-
-      const status: BookingStatus = stay.instantBook ? "confirmed" : "requested";
-      // A request expires after 24 hours, or at the end of the check-in day if that comes sooner.
-      const expires =
-        status === "requested" ? sql`least(now() + ${`${REQUEST_HOURS} hours`}::interval, ((${quote.checkIn}::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'))` : sql`NULL`;
-      const created = await tx.execute(sql`
-        INSERT INTO stays.bookings (id, listing_id, property_id, organization_id, host_user_id, guest_user_id, dates, nights, adults, children, pets,
-                                    nightly_breakdown, subtotal, cleaning_fee, total, status, guest_name, guest_phone, guest_message,
-                                    cancellation_policy, check_in_time, check_out_time, expires_at, confirmed_at)
-        VALUES (gen_random_uuid(), ${stay.listingId}, ${stay.propertyId}, ${stay.organizationId}, ${stay.hostUserId}, ${guest.userId},
-                daterange(${quote.checkIn}::date, ${quote.checkOut}::date), ${quote.nights}, ${input.adults}, ${input.children}, ${input.pets},
-                ${JSON.stringify(quote.nightly)}::jsonb, ${quote.subtotal}, ${quote.cleaningFee}, ${quote.total}, ${status}, ${input.name}, ${input.phone},
-                ${input.message ?? null}, ${stay.cancellationPolicy}, ${stay.checkInTime}::time, ${stay.checkOutTime}::time, ${expires},
-                ${status === "confirmed" ? sql`now()` : sql`NULL`})
-        RETURNING id, reference_id`);
-      const booking = created.rows[0] as Row;
-      const bookingId = String(booking.id);
-      const bookingRef = String(booking.reference_id);
-      await writeEvent(tx, bookingId, null, status, status === "confirmed" ? "instant_book" : "request", guest.userId, "guest", input.message);
-
-      const person: PersonActor = { kind: "person", userId: guest.userId, referenceId: String(a.reference_id), role: "guest" };
-      await audit(
-        tx,
-        person,
-        {
-          event: "BOOKING_CREATED",
-          target: { type: "booking", id: bookingId, referenceId: bookingRef },
-          organizationId: stay.organizationId,
-          metadata: { listing: stay.referenceId, status, checkIn: quote.checkIn, checkOut: quote.checkOut, total: quote.total },
-        },
-        ctx,
-      );
-      await notify(tx, [stay.hostUserId], {
-        type: status === "confirmed" ? "booking_confirmed" : "booking_requested",
-        title:
-          status === "confirmed"
-            ? `New booking ${bookingRef}: ${formatDay(quote.checkIn)} – ${formatDay(quote.checkOut)}`
-            : `${input.name} asks to book ${formatDay(quote.checkIn)} – ${formatDay(quote.checkOut)}`,
-        body: stay.title,
-        link: `/bookings/${bookingRef}`,
-      });
-      return { referenceId: bookingRef, status, stay, quote };
+      const placed = await placeBooking(tx, guest, referenceId, input, "pay_at_property");
+      return announceBooking(tx, placed.bookingId, ctx);
     })
     .catch((error) => {
       if (isOverlap(error)) throw conflict("Someone just booked some of those dates. Choose different dates.");
       throw error;
     });
-
-  const { stay, quote } = result;
-  const dates = `${formatDay(quote.checkIn)} – ${formatDay(quote.checkOut)} (${nightsLabel(quote.nights)})`;
-  void Promise.all([
-    stay.hostEmail
-      ? sendEmail(
-          bookingMessage(stay.hostEmail, {
-            subject: result.status === "confirmed" ? `New booking for ${stay.title}` : `Booking request for ${stay.title}`,
-            heading: result.status === "confirmed" ? "You have a new booking" : "A guest wants to stay",
-            lines: [
-              `${input.name} ${result.status === "confirmed" ? "booked" : "asks to book"} ${stay.title} for ${dates}, ${input.adults + input.children} guest(s).`,
-              `Total ${money(quote.total)}, paid to you at the property.`,
-              result.status === "requested" ? `Accept or decline within ${REQUEST_HOURS} hours, or the request expires.` : "The dates are now blocked on your calendar.",
-            ],
-            action: { label: "Open the booking", url: url(`/bookings/${result.referenceId}`) },
-          }),
-        )
-      : null,
-    sendEmail(
-      bookingMessage(guest.email, {
-        subject: result.status === "confirmed" ? `Booked: ${stay.title}` : `Request sent: ${stay.title}`,
-        heading: result.status === "confirmed" ? "Your stay is confirmed" : "Your request is with the host",
-        lines: [
-          `${stay.title}, ${stay.locality}. ${dates}.`,
-          `Total ${money(quote.total)}, paid to the host at the property.`,
-          result.status === "confirmed"
-            ? "The exact address and the host's phone number are on your trip page."
-            : `The host has ${REQUEST_HOURS} hours to respond. We'll email you either way.`,
-        ],
-        action: { label: "View your trip", url: url(`/account/trips/${result.referenceId}`) },
-      }),
-    ),
-  ]).catch((e) => log.error("email.booking_failed", { error: String(e) }));
-
-  return { referenceId: result.referenceId, status: result.status };
+  emailNewBooking(announced);
+  return { referenceId: announced.referenceId, status: announced.status };
 }
 
 // ── Reading bookings ─────────────────────────────────────────────────────────
@@ -440,7 +553,7 @@ export type BookingFilters = z.infer<typeof bookingFilters>;
 export async function listBookingsForActor(actor: Actor, filters: BookingFilters, page: number): Promise<Page<BookingRow> & { counts: Record<BookingGroup, number> }> {
   const scope = bookingScope(actor, "bookings.view");
   await expireStaleRequests(db, scope);
-  const where: SQL[] = [scope, BOOKING_GROUPS[filters.group]];
+  const where: SQL[] = [scope, UNBOOKED, BOOKING_GROUPS[filters.group]];
   if (filters.status) where.push(sql`b.status = ${filters.status}`);
   if (filters.q) {
     const ref = normalizeReferenceId(filters.q);
@@ -457,7 +570,7 @@ export async function listBookingsForActor(actor: Actor, filters: BookingFilters
       SELECT ${sql.join(
         (Object.keys(BOOKING_GROUPS) as BookingGroup[]).map((g) => sql`count(*) FILTER (WHERE ${BOOKING_GROUPS[g]})::int AS ${sql.raw(g)}`),
         sql`, `,
-      )} FROM stays.bookings b WHERE ${scope}`),
+      )} FROM stays.bookings b WHERE ${scope} AND ${UNBOOKED}`),
   ]);
   const g = groups.rows[0] as Row;
   return {
@@ -526,6 +639,8 @@ export async function getBookingForActor(actor: Actor, referenceId: string): Pro
   const { rows } = await db.execute(sql`SELECT ${BOOKING_COLUMNS} FROM stays.bookings b ${BOOKING_JOINS} WHERE b.reference_id = ${referenceId} AND ${scope}`);
   const r = rows[0] as Row | undefined;
   if (!r) throw notFound();
+  // An unpaid checkout isn't a booking yet: only platform staff see it (on Payments).
+  if (["pending_payment", "abandoned"].includes(String(r.status)) && !can(actor, "bookings.view", "platform")) throw notFound();
   const detail = await detailFor(r, null);
   const actions: BookingAction[] = [];
   if (can(actor, "bookings.manage") && actor.workspace === "professional") {
@@ -549,11 +664,30 @@ const AUDIT_FOR: Partial<Record<BookingAction, AuditEvent>> = {
   no_show: "BOOKING_NO_SHOW",
 };
 
-type Locked = { id: string; referenceId: string; status: BookingStatus; listingId: string; checkIn: string; checkOut: string; hostUserId: string; guestUserId: string; organizationId: string; guestEmail: string; guestName: string; hostEmail: string; title: string; expired: boolean };
+type Locked = {
+  id: string;
+  referenceId: string;
+  status: BookingStatus;
+  listingId: string;
+  checkIn: string;
+  checkOut: string;
+  checkInTime: string;
+  hostUserId: string;
+  guestUserId: string;
+  organizationId: string;
+  guestEmail: string;
+  guestName: string;
+  hostEmail: string;
+  title: string;
+  expired: boolean;
+  paymentMode: PaymentMode;
+  cancellationPolicy: "flexible" | "moderate" | "strict";
+};
 
 async function lockBooking(tx: Tx, where: SQL): Promise<Locked | null> {
   const { rows } = await tx.execute(sql`
     SELECT b.id, b.reference_id, b.status, b.listing_id, b.host_user_id, b.guest_user_id, b.organization_id, b.guest_name,
+           b.payment_mode, b.cancellation_policy, to_char(b.check_in_time, 'HH24:MI') AS check_in_time,
            to_char(lower(b.dates), 'YYYY-MM-DD') AS check_in, to_char(upper(b.dates), 'YYYY-MM-DD') AS check_out,
            (b.status = 'requested' AND b.expires_at <= now()) AS expired, gu.email AS guest_email, hu.email AS host_email, l.title
       FROM stays.bookings b
@@ -578,6 +712,9 @@ async function lockBooking(tx: Tx, where: SQL): Promise<Locked | null> {
     hostEmail: String(r.host_email),
     title: String(r.title),
     expired: Boolean(r.expired),
+    paymentMode: r.payment_mode as PaymentMode,
+    cancellationPolicy: r.cancellation_policy as Locked["cancellationPolicy"],
+    checkInTime: String(r.check_in_time),
   };
 }
 
@@ -602,6 +739,7 @@ async function applyTransition(tx: Tx, who: Who, booking: Locked, action: Bookin
   if (action === "accept") {
     // Serialise with other decisions and new bookings on this listing, then re-check the host's own blocks.
     await tx.execute(sql`SELECT 1 FROM stays.stay_terms WHERE listing_id = ${booking.listingId} FOR UPDATE`);
+    await expireStaleRequests(tx, sql`b.listing_id = ${booking.listingId} AND b.status = 'pending_payment'`);
     if (await unavailable(tx, booking.listingId, booking.checkIn, booking.checkOut, booking.id)) {
       throw conflict("Those dates are no longer free: they're blocked on your calendar or already booked.");
     }
@@ -615,8 +753,13 @@ async function applyTransition(tx: Tx, who: Who, booking: Locked, action: Bookin
     UPDATE stays.bookings SET status = ${to}, status_reason = ${reason}, cancelled_by = ${cancelledBy}, updated_at = now() ${stamp}
      WHERE id = ${booking.id} AND status = ${booking.status}`);
   await writeEvent(tx, booking.id, booking.status, to, action, who.userId, who.role, reason);
-  // The stay has begun, so Trustbrick's commission on it is due (once, whatever happens next).
-  if (to === "checked_in") await chargeBooking(tx, who.audit, booking.id, ctx);
+  const online = booking.paymentMode === "online";
+  // Paid online: refunds and the host's payout follow the booking (the provider calls happen after commit).
+  let money: MoneyOutcome | null = null;
+  if (online) money = await moneyOnTransition(tx, { bookingId: booking.id, to, cancelledBy, policy: booking.cancellationPolicy, checkIn: booking.checkIn, checkInTime: booking.checkInTime, actorUserId: who.userId });
+  // Paid at the property: the stay has begun, so Trustbrick's commission on it is due (once, whatever happens next).
+  // Paid online, the commission is kept back from the host's payout instead.
+  if (to === "checked_in" && !online) await chargeBooking(tx, who.audit, booking.id, ctx);
 
   // Accepting one request frees the host from the others for the same dates.
   let autoDeclined: Row[] = [];
@@ -641,7 +784,11 @@ async function applyTransition(tx: Tx, who: Who, booking: Locked, action: Bookin
         organizationId: booking.organizationId,
         before: { status: booking.status },
         after: { status: to },
-        metadata: { ...(reason ? { reason } : {}), ...(autoDeclined.length ? { autoDeclined: autoDeclined.map((d) => d.reference_id) } : {}) },
+        metadata: {
+          ...(reason ? { reason } : {}),
+          ...(autoDeclined.length ? { autoDeclined: autoDeclined.map((d) => d.reference_id) } : {}),
+          ...(money?.refund ? { refund: money.refund.amount, refundKind: money.refund.kind } : {}),
+        },
       },
       ctx,
     );
@@ -673,7 +820,16 @@ async function applyTransition(tx: Tx, who: Who, booking: Locked, action: Bookin
         bookingMessage(booking.guestEmail, {
           subject: `${BOOKING_STATUS_LABELS[to]}: ${booking.title}`,
           heading: note.title,
-          lines: [reason ? `Note: ${reason}` : `${booking.title}, ${dates}.`, to === "confirmed" ? "The exact address and the host's phone number are now on your trip page." : "Nothing was charged: payment is only ever made at the property."],
+          lines: [
+            reason ? `Note: ${reason}` : `${booking.title}, ${dates}.`,
+            to === "confirmed"
+              ? online
+                ? "Your payment has been taken. The exact address and the host's phone number are now on your trip page."
+                : "The exact address and the host's phone number are now on your trip page."
+              : online
+                ? moneyLine(money)
+                : "Nothing was charged: payment is only ever made at the property.",
+          ],
           action: { label: "View your trip", url: url(`/account/trips/${booking.referenceId}`) },
         }),
       ),
@@ -692,7 +848,16 @@ async function applyTransition(tx: Tx, who: Who, booking: Locked, action: Bookin
     );
   }
   if (emails.length) void Promise.all(emails).catch((e) => log.error("email.booking_failed", { error: String(e) }));
-  return { status: to, autoDeclined: autoDeclined.length };
+  return { status: to, autoDeclined: autoDeclined.length, bookingId: booking.id, refund: money?.refund ?? null, online };
+}
+
+/** What happens to a guest's money, in a sentence for their email. */
+function moneyLine(m: MoneyOutcome | null): string {
+  const r = m?.refund;
+  if (!r) return "Nothing was charged.";
+  if (r.kind === "release") return `The hold of ${money(r.amount)} on your payment is released; nothing was charged.`;
+  if (r.amount <= 0) return "Under the cancellation policy, there's no refund.";
+  return `${money(r.amount)} is on its way back to you. Refunds usually reach your account in 5–7 working days.`;
 }
 
 /** A host (within their scope) or an admin acts on a booking. */
@@ -704,7 +869,7 @@ export async function transitionBooking(actor: Actor, referenceId: string, actio
   const reason = typeof rawReason === "string" && rawReason.trim() ? rawReason.trim().slice(0, 2000) : null;
   const scope = def.side === "admin" ? sql`TRUE` : bookingScope(actor, "bookings.manage");
   if (def.side === "host" && actor.workspace !== "professional") throw new AppError("FORBIDDEN", "Only the host can do this. Admins can cancel on Trustbrick's behalf.");
-  return db
+  const result = await db
     .transaction(async (tx) => {
       const booking = await lockBooking(tx, sql`b.reference_id = ${referenceId} AND ${scope}`);
       if (!booking) throw notFound();
@@ -714,6 +879,18 @@ export async function transitionBooking(actor: Actor, referenceId: string, actio
       if (isOverlap(error)) throw conflict("Those dates were just booked by another guest.");
       throw error;
     });
+  await settleAfter(result, action === "accept");
+  return result;
+}
+
+/**
+ * After a decision on a booking paid online: capture, release or refund at the provider now,
+ * rather than waiting for the payments job (which retries anything that fails here).
+ */
+async function settleAfter(result: { online: boolean; bookingId: string }, everyRequestOnListing = false) {
+  if (!result.online) return;
+  const { settlePayments } = await import("./payments");
+  await settlePayments(everyRequestOnListing ? {} : { bookingId: result.bookingId });
 }
 
 // ── Guests' own trips ────────────────────────────────────────────────────────
@@ -730,7 +907,7 @@ export async function listTrips(userId: string): Promise<BookingRow[]> {
   await expireStaleRequests(db, sql`b.guest_user_id = ${userId}`);
   const { rows } = await db.execute(sql`
     SELECT ${BOOKING_COLUMNS} FROM stays.bookings b ${BOOKING_JOINS}
-     WHERE b.guest_user_id = ${userId}
+     WHERE b.guest_user_id = ${userId} AND b.status <> 'abandoned'
      ORDER BY (b.status IN ('requested', 'confirmed', 'checked_in') AND upper(b.dates) >= (now() AT TIME ZONE 'Asia/Kolkata')::date) DESC, lower(b.dates) DESC LIMIT 100`);
   return (rows as Row[]).map(toRow);
 }
@@ -775,11 +952,13 @@ export async function getTrip(userId: string, referenceId: string): Promise<Trip
 export async function cancelTrip(guest: PersonActor, referenceId: string, rawReason: unknown, ctx: RequestContext) {
   if (!isReferenceId(referenceId, "BKG")) throw notFound();
   const reason = typeof rawReason === "string" && rawReason.trim() ? rawReason.trim().slice(0, 1000) : null;
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const booking = await lockBooking(tx, sql`b.reference_id = ${referenceId} AND b.guest_user_id = ${guest.userId}`);
     if (!booking) throw notFound();
     return applyTransition(tx, { userId: guest.userId, referenceId: guest.referenceId, role: "guest", audit: guest }, booking, "guest_cancel", reason, ctx);
   });
+  await settleAfter(result);
+  return result;
 }
 
 // ── Numbers for dashboards ───────────────────────────────────────────────────

@@ -28,6 +28,9 @@ export const REFERENCE_ENTITIES = {
   LGL: { label: "Legal verification request", path: "/legal-requests" },
   COM: { label: "Commission charge", path: "/commissions" },
   SUB: { label: "Subscription", path: "/subscriptions" },
+  PAY: { label: "Payment", path: "/payments" },
+  RFD: { label: "Refund", path: "/payments" },
+  PYT: { label: "Payout", path: "/payments" },
 } as const;
 
 export type ReferencePrefix = keyof typeof REFERENCE_ENTITIES;

@@ -6,7 +6,7 @@ import { api } from "@/api/client";
 import type { HostBookingDetail } from "@/api/types";
 import { Badge, Body, Button, Card, Display, Divider, ErrorState, Eyebrow, Field, Loading, Notice, Scroll, Small, Title } from "@/components/ui";
 import { confirm } from "@/confirm";
-import { formatDateTime, formatDay, formatPrice } from "@/lib/format";
+import { formatDateTime, formatDay, formatMoney, formatPrice } from "@/lib/format";
 import { BOOKING_ACTIONS, type BookingAction } from "@/lib/stays/booking-lifecycle";
 import { BOOKING_STATUS_TONES, nightsLabel, timeLabel } from "@/lib/stays/labels";
 
@@ -20,7 +20,10 @@ export default function HostBookingScreen() {
   const act = useMutation({
     mutationFn: (action: BookingAction) => api<HostBookingDetail>(`/partner/bookings/${ref}/actions`, { method: "POST", body: { action, reason } }),
     onSuccess: (data) => {
-      queryClient.setQueryData(["partner-booking", ref], data);
+      queryClient.setQueryData(["partner-booking", ref], (old: HostBookingDetail | undefined) => ({ ...data, money: old?.money }));
+      // The money changes with the decision (a payment taken, a refund): fetch it again.
+      void queryClient.invalidateQueries({ queryKey: ["partner-booking", ref] });
+      void queryClient.invalidateQueries({ queryKey: ["partner-payouts"] });
       void queryClient.invalidateQueries({ queryKey: ["partner-bookings"] });
       void queryClient.invalidateQueries({ queryKey: ["partner-summary"] });
       setPending(null);
@@ -70,11 +73,46 @@ export default function HostBookingScreen() {
         </Small>
         <Divider />
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Title>To collect at the property</Title>
+          <Title>{b.money ? (b.money.state === "held" ? "Guest's payment, on hold" : "Guest paid online") : "To collect at the property"}</Title>
           <Title>{formatPrice(b.total, { compact: false })}</Title>
         </View>
         {b.guestMessage ? <Body tone="graphite">“{b.guestMessage}”</Body> : null}
       </Card>
+
+      {b.money && (
+        <Card>
+          <Title>Money</Title>
+          {[
+            [b.money.state === "held" ? "Guest's payment (held)" : "Guest paid", b.money.paid],
+            ...(b.money.refunded > 0 ? [["Refunded to the guest", -b.money.refunded] as const] : []),
+            [`Trustbrick's commission (${b.money.commissionPercent}%)`, -b.money.commission],
+            [`GST on commission (${b.money.gstPercent}%)`, -b.money.gst],
+          ].map(([label, amount]) => (
+            <View key={String(label)} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Body>{label}</Body>
+              <Body>{formatMoney(Number(amount))}</Body>
+            </View>
+          ))}
+          <Divider />
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Title>You receive</Title>
+            <Title>{formatMoney(b.money.youReceive)}</Title>
+          </View>
+          <Small>
+            {b.money.state === "held"
+              ? "Held until you accept. Accepting takes it; declining releases it."
+              : b.money.payout?.status === "paid" && b.money.payout.paidAt
+                ? `Paid ${formatDateTime(b.money.payout.paidAt)}${b.money.payout.utr ? `, bank reference ${b.money.payout.utr}` : ""}.`
+                : b.money.payout?.status === "cancelled"
+                  ? "Nothing is paid out: the guest was refunded in full."
+                  : b.money.payout?.status === "on_hold"
+                    ? `On hold: ${b.money.payout.holdReason ?? "Trustbrick is looking into it."}`
+                    : b.money.payout
+                      ? `Paid to your account a day after check-in, on ${formatDateTime(b.money.payout.releaseAt)}.`
+                      : ""}
+          </Small>
+        </Card>
+      )}
 
       {hostActions.length > 0 && (
         <Card>

@@ -291,6 +291,22 @@ When the domain changes, update both monitors' URLs.
 
 `docker compose ps` also shows the site as healthy or unhealthy, from the same check.
 
+## Online payments for stays
+
+Built and switched off. Until it's on, guests pay hosts at the property, as before.
+
+**Turning it on** (once Cashfree is connected):
+
+1. In the server's `.env`: `PAYMENTS_DRIVER=cashfree`, `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV` (`sandbox` first, then `production`). Never `fake`.
+2. In Cashfree's dashboard, set the webhook URL to `https://<site>/api/webhooks/payments/cashfree`.
+3. Reinstall the crontab (step 6) so the payments job runs: every 5 minutes, and a daily check against Cashfree's records at 03:30.
+4. Hosts add their bank account (Payouts in their workspace). Stays whose host hasn't can't be booked while payments are on.
+5. As SuperAdmin, switch on **Take payment online for home stays** in Platform settings.
+
+**Day to day:** the **Payments** page (platform workspace) lists every payment, refund and payout, with a **Needs attention** tab for anything that failed or didn't match Cashfree's records. Refunds, holding and releasing payouts are done there.
+
+**Commission:** taken from each payout (12% of what the guest paid and kept, plus 18% GST on it), and entered in the commission ledger as paid when the payout goes out. Rates are changed in Platform settings.
+
 ## Backups
 
 - **Database:** RDS backs it up automatically and can restore it **to any minute** in the retention period (7 days or more, step 3b).

@@ -41,6 +41,7 @@ import { getListing, listingTrust, savedPropertyIds, similarListings } from "@/l
 import { istDateFromNow } from "@/lib/range";
 import { enquiryContext } from "@/lib/services/crm";
 import { unavailableDates } from "@/lib/services/stays/bookings";
+import { stayPaymentState } from "@/lib/services/stays/payments";
 import { guestConversationSummary } from "@/lib/services/stays/messages";
 import { todayInIndia } from "@/lib/stays/booking-lifecycle";
 import { CANCELLATION_LABELS, SPACE_TYPE_LABELS, timeLabel } from "@/lib/stays/labels";
@@ -78,6 +79,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const stay = listing.stay;
   const today = todayInIndia();
   const unavailable = stay && listing.status === "published" ? await unavailableDates(listing.referenceId, today) : [];
+  const payState = stay && listing.status === "published" ? await stayPaymentState(listing.referenceId) : null;
   // Guests can message the host before booking; a returning guest picks up their earlier conversation.
   const canMessageHost = Boolean(stay?.hostUserId) && session?.user.id !== stay?.hostUserId;
   const conversation = canMessageHost && session ? await guestConversationSummary(session.user.id, listing.referenceId) : null;
@@ -731,8 +733,11 @@ export default async function ListingPage({ params, searchParams }: Props) {
                         ? "This is a sample stay without a host, so it can't be booked."
                         : session?.user.id === stay.hostUserId
                           ? "This is your stay. Bookings arrive in your hosting workspace."
-                          : null
+                          : payState?.online && !payState.ready
+                            ? "Not taking bookings yet: the host is still setting up how they're paid. Message them, or check back soon."
+                            : null
                     }
+                    payOnline={Boolean(payState?.online)}
                   />
                 )}
                 {showMessageHost && stay && (

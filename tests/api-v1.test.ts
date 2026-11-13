@@ -25,6 +25,11 @@ import * as book from "@/app/api/v1/listings/[ref]/bookings/route";
 import * as messageHost from "@/app/api/v1/listings/[ref]/messages/route";
 import * as quote from "@/app/api/v1/listings/[ref]/quote/route";
 import * as tripCancel from "@/app/api/v1/trips/[ref]/cancel/route";
+import * as checkoutRoute from "@/app/api/v1/listings/[ref]/checkout/route";
+import * as paymentRoute from "@/app/api/v1/payments/[ref]/route";
+import * as webhookRoute from "@/app/api/webhooks/payments/[provider]/route";
+import { fakeWebhook } from "@/lib/payments/fake";
+import { savePayoutAccount } from "@/lib/services/stays/payments";
 import * as trip from "@/app/api/v1/trips/[ref]/route";
 import * as trips from "@/app/api/v1/trips/route";
 import { sendHostMessage } from "@/lib/services/stays/messages";
@@ -244,6 +249,42 @@ describe("stays and messages", () => {
     // Someone else's trip is invisible.
     const other = await signedUpUser("Api Other Guest");
     expect((await call(trip.GET, `/api/v1/trips/${ref}`, { params: { ref }, token: other.token })).status).toBe(404);
+  });
+
+  it("pays online: checkout, the provider's webhook, the result, the trip's payment and a refund", async () => {
+    await db.execute(sql`INSERT INTO platform.system_settings (key, value) VALUES ('payments.stays_online', 'true'::jsonb) ON CONFLICT (key) DO UPDATE SET value = 'true'::jsonb`);
+    try {
+      const { token } = await signedUpUser("Api Payer");
+      const dates = { checkIn: day(60), checkOut: day(61), adults: 1, name: "Api Payer", phone: "98765 11111", agree: true };
+      // The old way is refused while payment is online, and paying needs the host's payout account.
+      expect((await call(book.POST, `/api/v1/listings/${stay}/bookings`, { method: "POST", params: { ref: stay }, token, body: dates })).status).toBe(409);
+      expect((await call(checkoutRoute.POST, `/api/v1/listings/${stay}/checkout`, { method: "POST", params: { ref: stay }, token, body: dates })).status).toBe(409);
+      await savePayoutAccount(host, { method: "upi", holderName: "Api Host", upi: "apihost@okhdfcbank", pan: "ABCDE1234F", agree: "on" }, ctx);
+      const listing = await call(detail.GET, `/api/v1/listings/${stay}`, { params: { ref: stay } });
+      expect(listing.body.data!.stay).toMatchObject({ payOnline: true, takingBookings: true });
+
+      const started = await call(checkoutRoute.POST, `/api/v1/listings/${stay}/checkout`, { method: "POST", params: { ref: stay }, token, body: dates });
+      expect(started.status).toBe(201);
+      const s = started.body.data!;
+      expect(s.checkout).toMatchObject({ kind: "redirect" });
+      expect(String((s.checkout as { url: string }).url)).toMatch(/^http:\/\/localhost:3000\/pay\/test\//);
+      const paymentRef = String(s.paymentReferenceId);
+      const bookingRef = String(s.bookingReferenceId);
+
+      // The provider's webhook, through the real route.
+      const hook = fakeWebhook(paymentRef, "upi", "manual", Number(s.amount));
+      const res = await webhookRoute.POST(new Request("http://localhost:3000/api/webhooks/payments/fake", { method: "POST", headers: hook.headers, body: hook.body }), { params: Promise.resolve({ provider: "fake" }) });
+      expect(res.status).toBe(200);
+      const status = await call(paymentRoute.GET, `/api/v1/payments/${paymentRef}`, { params: { ref: paymentRef }, token });
+      expect(status.body.data).toMatchObject({ state: "requested", amount: 4000 });
+
+      const t = await call(trip.GET, `/api/v1/trips/${bookingRef}`, { params: { ref: bookingRef }, token });
+      expect(t.body.data).toMatchObject({ status: "requested", payment: { status: "authorized", amount: 4000 }, cancel: { kind: "release", refund: 4000 } });
+      const cancelled = await call(tripCancel.POST, `/api/v1/trips/${bookingRef}/cancel`, { method: "POST", params: { ref: bookingRef }, token, body: {} });
+      expect(cancelled.body.data).toMatchObject({ status: "cancelled", refund: { kind: "release", amount: 4000 } });
+    } finally {
+      await db.execute(sql`DELETE FROM platform.system_settings WHERE key = 'payments.stays_online'`);
+    }
   });
 
   it("messages the host, and gets their reply as a notification", async () => {

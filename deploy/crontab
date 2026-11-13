@@ -7,3 +7,7 @@ SHELL=/bin/bash
 
 # 360° photos still waiting to be made, every 5 minutes.
 */5 * * * * cd REPO/deploy && set -a && . ./.env && curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/internal/captures
+
+# Online payments: holds, refunds and hosts' payouts, every 5 minutes; checked against the provider daily at 03:30.
+*/5 * * * * cd REPO/deploy && set -a && . ./.env && curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/internal/payments
+30 3 * * * cd REPO/deploy && set -a && . ./.env && curl -fsS -o /dev/null -X POST -H "Authorization: Bearer $CRON_SECRET" "http://127.0.0.1:3000/api/internal/payments?reconcile=1"

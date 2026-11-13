@@ -39,6 +39,8 @@ export const NOTIFICATION_TYPES = {
   booking_requested: "A guest asks to book one of your stays",
   booking_confirmed: "A booking is confirmed",
   booking_updated: "A booking is declined, cancelled or changed",
+  payment_update: "A payment, refund or payout of yours goes through, fails or changes",
+  payments_attention: "An online payment, refund or payout needs a look",
   stay_message: "A guest sends you a message about a stay",
   host_message: "A host replies to your message about a stay",
   admin_access_changed: "Your administrator access changes",

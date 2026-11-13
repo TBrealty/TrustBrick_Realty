@@ -8,8 +8,11 @@ import { requireSession } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { formatDateTime, formatDay, formatPrice } from "@/lib/format";
 import { getTrip } from "@/lib/services/stays/bookings";
+import { tripMoney } from "@/lib/services/stays/payments";
+import { FinishPayment } from "@/components/stays/FinishPayment";
+import { formatMoney } from "@/lib/format";
 import { conversationForBooking } from "@/lib/services/stays/messages";
-import { BOOKING_STATUS_TONES, nightsLabel, timeLabel } from "@/lib/stays/labels";
+import { BOOKING_STATUS_TONES, CANCELLATION_LABELS, nightsLabel, timeLabel } from "@/lib/stays/labels";
 import { ServicePage } from "@/components/navigation/ServicePage";
 import { SERVICE_SHELLS } from "@/lib/listings/services";
 
@@ -29,7 +32,22 @@ export default async function TripPage({ params, searchParams }: Props) {
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   });
-  const conversationRef = await conversationForBooking(trip.referenceId);
+  const [conversationRef, funds] = await Promise.all([conversationForBooking(trip.referenceId), tripMoney(user.id, trip.referenceId)]);
+  const pay = funds.payment;
+  const online = pay !== null || funds.pendingPayment !== null;
+  const PAY_STATUS: Record<string, string> = {
+    authorized: "On hold, not charged",
+    captured: "Paid",
+    partially_refunded: "Paid, partly refunded",
+    refunded: "Refunded",
+  };
+  const cancelText = funds.cancel
+    ? funds.cancel.kind === "release"
+      ? `The hold of ${formatMoney(funds.cancel.refund)} on your payment is released straight away; nothing is charged.`
+      : funds.cancel.refund > 0
+        ? `You'll get back ${formatMoney(funds.cancel.refund)}${funds.cancel.kept > 0 ? ` (${formatMoney(funds.cancel.kept)} is kept under the host's policy)` : ""}. Refunds reach your account in 5–7 working days.`
+        : `Under the host's policy, the ${formatMoney(funds.cancel.kept)} you paid isn't refunded at this point.`
+    : null;
   const messageHref = conversationRef ? `/account/messages/${conversationRef}` : `/account/messages/new?listing=${trip.listing.referenceId}`;
   const groups = new Map<number, number>();
   for (const n of trip.nightly) groups.set(n.price, (groups.get(n.price) ?? 0) + 1);
@@ -42,7 +60,9 @@ export default async function TripPage({ params, searchParams }: Props) {
         </Link>
         {booked && (
           <p role="status" className="mt-5 border-l-2 border-sage bg-sage/10 px-4 py-3 text-[0.9375rem]">
-            {trip.status === "confirmed"
+            {trip.status === "pending_payment"
+              ? "Your booking isn't complete until you pay."
+              : trip.status === "confirmed"
               ? "You're booked. The address and the host's phone number are below."
               : "Request sent. The host has 24 hours to accept; we'll email you either way."}
           </p>
@@ -60,6 +80,17 @@ export default async function TripPage({ params, searchParams }: Props) {
 
         {trip.statusReason && ["declined", "cancelled", "expired"].includes(trip.status) && (
           <p className="mt-5 border-l-2 border-amber bg-amber/10 px-4 py-3 text-[0.9375rem]">{trip.statusReason}</p>
+        )}
+        {trip.status === "pending_payment" && (
+          <div className="mt-5 border-l-2 border-amber bg-amber/10 px-4 py-3 text-[0.9375rem]">
+            <p>
+              Not booked yet: the payment wasn&apos;t finished.
+              {funds.pendingPayment?.holdExpiresAt ? ` Pay by ${formatDateTime(funds.pendingPayment.holdExpiresAt)} to keep these dates.` : ""}
+            </p>
+            <div className="mt-3">
+              <FinishPayment bookingRef={trip.referenceId} amount={trip.total} />
+            </div>
+          </div>
         )}
         {trip.status === "requested" && trip.expiresAt && (
           <p className="mt-5 border-l-2 border-line-light bg-paper px-4 py-3 text-[0.9375rem] text-graphite">
@@ -156,7 +187,7 @@ export default async function TripPage({ params, searchParams }: Props) {
                 </div>
               )}
               <div className="flex justify-between gap-3 border-t border-line-light pt-2 font-medium">
-                <dt>Total, paid to the host at the property</dt>
+                <dt>{online ? "Total" : "Total, paid to the host at the property"}</dt>
                 <dd>{money(trip.total)}</dd>
               </div>
             </dl>
@@ -166,13 +197,62 @@ export default async function TripPage({ params, searchParams }: Props) {
           </div>
         </section>
 
+        {pay && (
+          <section className="mt-10 border-t border-line-light pt-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="text-[1.125rem] font-medium">Payment</h2>
+              {pay.receipt && (
+                <Link href={`/account/trips/${trip.referenceId}/receipt`} className="text-[0.875rem] font-medium underline">
+                  Receipt
+                </Link>
+              )}
+            </div>
+            <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 text-[0.9375rem] sm:grid-cols-2">
+              <div>
+                <dt className="text-[0.8125rem] text-stone-deep">Status</dt>
+                <dd className="mt-0.5 font-medium">{PAY_STATUS[pay.status] ?? pay.status}</dd>
+              </div>
+              <div>
+                <dt className="text-[0.8125rem] text-stone-deep">Amount</dt>
+                <dd className="mt-0.5">
+                  {formatMoney(pay.amount)}
+                  {pay.method ? ` by ${pay.method === "upi" ? "UPI" : pay.method === "netbanking" ? "net banking" : pay.method}` : ""}
+                  {pay.paidAt ? `, ${formatDateTime(pay.paidAt)}` : ""}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[0.8125rem] text-stone-deep">Payment ID</dt>
+                <dd className="mt-0.5 font-mono text-[0.875rem]">{pay.referenceId}</dd>
+              </div>
+              {pay.refunds.map((r) => (
+                <div key={r.referenceId}>
+                  <dt className="text-[0.8125rem] text-stone-deep">Refund {r.referenceId}</dt>
+                  <dd className="mt-0.5">
+                    {formatMoney(r.amount)} ·{" "}
+                    {r.status === "processed" ? `sent ${formatDay(r.processedAt ?? r.createdAt)}; allow 5–7 working days` : r.status === "pending" ? "on its way" : "delayed; our team is on it"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {funds.timeline.length > 0 && ["requested", "confirmed"].includes(trip.status) && (
+              <p className="mt-4 text-[0.8125rem] text-stone-deep">
+                {funds.timeline[0].refundPercent === 100 && funds.timeline[0].to
+                  ? `Free cancellation until ${formatDateTime(funds.timeline[0].to)}. ${CANCELLATION_LABELS[trip.cancellationPolicy.code as keyof typeof CANCELLATION_LABELS].late}`
+                  : `${trip.cancellationPolicy.rule} ${CANCELLATION_LABELS[trip.cancellationPolicy.code as keyof typeof CANCELLATION_LABELS].late}`}
+              </p>
+            )}
+          </section>
+        )}
+
         {trip.canCancel && (
           <section className="mt-10 border-t border-line-light pt-6">
             <ConfirmAction
               label={trip.status === "requested" ? "Withdraw request" : "Cancel booking"}
               title={trip.status === "requested" ? "Withdraw this request?" : "Cancel this booking?"}
               description={
-                trip.status === "requested"
+                cancelText
+                  ? `${cancelText} The host is told straight away.`
+                  : trip.status === "requested"
                   ? "The host is told you no longer need the dates."
                   : trip.freeCancellation
                     ? "Under the host's policy this cancellation is free. The host is told straight away."

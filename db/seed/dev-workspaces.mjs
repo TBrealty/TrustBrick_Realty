@@ -19,6 +19,7 @@ import pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { ADMIN_PRESETS } from "../../lib/authz/catalog.ts";
 import { seedReference } from "./reference.mjs";
+import { MODELS, PANORAMAS, addModel, addTour, panoramaMedia } from "./tours.mjs";
 
 try {
   process.loadEnvFile(".env.local");
@@ -85,12 +86,19 @@ const ACCOUNTS = {
 async function clearWorkspace(q, devUsers, devOrgIds) {
   const { rows: oldAddresses } = await q(`SELECT address_id AS id FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM platform.notifications WHERE user_id = ANY($1::uuid[])`, [devUsers]);
+  await q(`DELETE FROM finance.subscriptions WHERE user_id = ANY($1::uuid[])`, [devUsers]);
   await q(`DELETE FROM crm.visits WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM crm.leads WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM crm.contacts WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM trust.review_cases WHERE organization_id = ANY($1::uuid[])
              OR agent_profile_id IN (SELECT id FROM orgs.agent_profiles WHERE user_id = ANY($2::uuid[]))`, [devOrgIds, devUsers]);
   await q(`DELETE FROM stays.conversations WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
+  // Online payments for those bookings go first: they refer to the bookings.
+  const devBookings = `SELECT id FROM stays.bookings WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`;
+  await q(`DELETE FROM finance.refunds WHERE booking_id IN (${devBookings})`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM finance.payouts WHERE booking_id IN (${devBookings})`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM finance.payments WHERE booking_id IN (${devBookings})`, [devOrgIds, devUsers]);
+  await q(`DELETE FROM finance.payout_accounts WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM stays.bookings WHERE organization_id = ANY($1::uuid[]) OR guest_user_id = ANY($2::uuid[])`, [devOrgIds, devUsers]);
   await q(`DELETE FROM marketplace.listings WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
   await q(`DELETE FROM real_estate.properties WHERE organization_id = ANY($1::uuid[])`, [devOrgIds]);
@@ -268,6 +276,14 @@ try {
     [id.hostApplicant, city.pune, ago(1)],
   );
   m.host = await membership(id.host, org.rahul.id, ["host"]);
+  // Rahul can be paid online (development only: the test payment provider holds this "account").
+  if (!PRODUCTION) {
+    await q(
+      `INSERT INTO finance.payout_accounts (id, organization_id, provider, provider_vendor_id, method, holder_name, bank_name, account_last4, ifsc, status, verified_at, created_by)
+       SELECT gen_random_uuid(), o.id, 'fake', o.reference_id, 'bank', 'Rahul Menon', 'HDFC Bank', '4321', 'HDFC0001234', 'active', now(), $2 FROM orgs.organizations o WHERE o.id = $1`,
+      [org.rahul.id, id.host],
+    );
+  }
 
   const team = await one(`INSERT INTO orgs.teams (id, organization_id, name) VALUES (gen_random_uuid(), $1, 'Hyderabad West') RETURNING id`, [org.skyline.id]);
   await q(`INSERT INTO orgs.team_members (team_id, membership_id, is_lead) VALUES ($1, $2, true), ($1, $3, false)`, [team.id, m.teamLead, m.agent]);
@@ -600,6 +616,23 @@ try {
     ["guest", "Hello, is the garden fenced? We have a two-year-old. (Sample message.)", 35, false],
   ]);
 
+  // ── 360° tours, and a Plus member to see them as a visitor would ─────────────
+  const panoramaIds = await panoramaMedia(q);
+  const P = PANORAMAS;
+  await addTour(q, panoramaIds, created.priyaRent.propertyId, [P.living[0], P.bedroom[0], P.kitchen[0], P.bathroom[0]]);
+  await addTour(q, panoramaIds, created.kabirRent.propertyId, [P.living[2], P.bedroom[1], P.bathroom[0]]);
+  await addTour(q, panoramaIds, created.rahulVilla.propertyId, [P.glasshouse[0], P.living[1], P.bedroom[2], P.kitchen[0], P.bathroom[0]]);
+  await addModel(q, panoramaIds, created.priyaRent.propertyId, MODELS.apartment);
+  await addModel(q, panoramaIds, created.rahulVilla.propertyId, MODELS.villa);
+  const plus = await one(`SELECT id, monthly_price FROM finance.plans WHERE code = 'customer_plus'`);
+  if (plus) {
+    await q(
+      `INSERT INTO finance.subscriptions (id, user_id, plan_id, billing_cycle, status, price, current_period_start, current_period_end, provider, created_by)
+       VALUES (gen_random_uuid(), $1, $2, 'monthly', 'active', $3, $4, $5, 'manual', $6)`,
+      [id.customer1, plus.id, plus.monthly_price, ago(3), new Date(NOW + 27 * DAY), id.superadmin],
+    );
+  }
+
   // ── A report, bookmarks, an invitation, notifications ──────────────────────
   await q(`INSERT INTO trust.reports (id, listing_id, reporter_user_id, reason, details, created_at) VALUES (gen_random_uuid(), $1, $2, 'incorrect_details', $3, $4)`,
     [created.kabirRent.id, id.customer3, "Sample report: the photos don't match the flat I visited.", ago(2)]);
@@ -663,6 +696,7 @@ try {
         suspendedAgent: `Suspended agent ${agent.suspended.reference_id}`,
         applicant: `Pending agent application ${agent.applicant.reference_id}`,
         host: `Host, 2 stays in Goa ${host.rahul.reference_id}`,
+        customer1: "Customer with Plus (sees 360° tours)",
         hostApplicant: `Pending host application ${host.sneha.reference_id}`,
       }[key] ?? "Customer",
     })),

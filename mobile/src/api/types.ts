@@ -55,6 +55,10 @@ export type StayView = {
   eventsAllowed: boolean;
   houseRules: string | null;
   host: { name: string; referenceId: string | null; verified: boolean; since: string; languages: string[]; about: string | null } | null;
+  /** Booked by paying online (POST /listings/{ref}/checkout); false: paid to the host at the property. */
+  payOnline?: boolean;
+  /** False while the host isn't set up to be paid online. */
+  takingBookings?: boolean;
 };
 
 export type ListingDetail = ListingSummary & {
@@ -125,7 +129,7 @@ export type TripDetail = Trip & {
   hostPhone: string | null;
   canCancel: boolean;
   freeCancellation: boolean;
-};
+} & Partial<TripMoney>;
 
 export type ChatMessage = { seq: number; body: string; mine: boolean; senderName: string; createdAt: string };
 
@@ -209,6 +213,8 @@ export type HostBookingDetail = HostBooking & {
   guestContact: { phone: string; email: string } | null;
   events: { from: string | null; to: string; label: string; note: string | null; actorRole: string; at: string }[];
   actions: BookingAction[];
+  /** Paid online: the guest's payment, commission and the payout. */
+  money?: BookingMoney | null;
 };
 
 export type BookingGroup = "requests" | "upcoming" | "past" | "cancelled" | "all";
@@ -268,3 +274,102 @@ export type PartnerListing = {
 };
 
 export type PartnerCapture = { id: string; roomName: string; status: "uploading" | "queued" | "stitching" | "done" | "failed"; error: string | null; shots: number; shotCount: number; createdAt: string };
+
+// ── Online payments for stays (when switched on) ─────────────────────────────
+
+export type PaymentCheckout = { kind: "redirect"; url: string } | { kind: "cashfree"; sessionId: string; mode: "sandbox" | "production" };
+
+export type CheckoutStart = {
+  bookingReferenceId: string;
+  paymentReferenceId: string;
+  amount: number;
+  instantBook: boolean;
+  holdExpiresAt: string | null;
+  checkout: PaymentCheckout;
+};
+
+export type CheckoutStatus = {
+  state: "confirming" | "booked" | "requested" | "failed" | "expired";
+  paymentReferenceId: string;
+  bookingReferenceId: string;
+  listingReferenceId: string;
+  title: string;
+  amount: number;
+  method: string | null;
+  failureReason: string | null;
+  holdExpiresAt: string | null;
+  requestExpiresAt: string | null;
+  checkIn: string;
+  checkOut: string;
+  hostName: string;
+};
+
+export type TripPayment = {
+  referenceId: string;
+  status: "authorized" | "captured" | "partially_refunded" | "refunded";
+  amount: number;
+  refunded: number;
+  method: string | null;
+  providerPaymentId: string | null;
+  paidAt: string | null;
+  refunds: { referenceId: string; amount: number; status: "pending" | "processed" | "failed"; reason: string; createdAt: string; processedAt: string | null }[];
+  receipt: boolean;
+};
+
+export type TripMoney = {
+  payment: TripPayment | null;
+  cancel: { kind: "release" | "full" | "partial" | "none"; refund: number; kept: number; summary: string; cutoff: string } | null;
+  timeline: { label: string; from: string | null; to: string | null; refundPercent: number }[];
+  pendingPayment: { holdExpiresAt: string | null } | null;
+};
+
+export type Receipt = {
+  receiptNumber: string;
+  issuedAt: string;
+  guest: { name: string; email: string; phone: string };
+  booking: { referenceId: string; checkIn: string; checkOut: string; nights: number; guests: number; checkInTime: string; checkOutTime: string };
+  stay: { title: string; address: string; hostName: string };
+  lines: { label: string; amount: number }[];
+  total: number;
+  refunds: { referenceId: string; amount: number; status: string; at: string }[];
+  netPaid: number;
+  payment: { referenceId: string; method: string | null; providerPaymentId: string | null; provider: string; paidAt: string };
+};
+
+export type BookingMoney = {
+  paid: number;
+  refunded: number;
+  kept: number;
+  commissionPercent: number;
+  commission: number;
+  gstPercent: number;
+  gst: number;
+  youReceive: number;
+  state: "held" | "paid";
+  payout: { referenceId: string; status: PayoutStatus; releaseAt: string; paidAt: string | null; utr: string | null; holdReason: string | null } | null;
+};
+
+export type PayoutStatus = "scheduled" | "on_hold" | "processing" | "paid" | "failed" | "cancelled";
+
+export type HostPayouts = {
+  account: { method: "bank" | "upi"; holderName: string; bankName: string | null; accountLast4: string | null; ifsc: string | null; upiMasked: string | null; status: "pending" | "active" | "action_required" | "suspended"; statusReason: string | null; verifiedAt: string | null } | null;
+  canManageAccount: boolean;
+  online: boolean;
+  totals: { receivedThisMonth: number; upcoming: number; onHold: number; upcomingCount: number };
+  rows: {
+    referenceId: string;
+    booking: { referenceId: string; guestName: string; checkIn: string; checkOut: string; title: string; status: BookingStatus };
+    gross: number;
+    paid: number;
+    refunded: number;
+    commission: number;
+    gst: number;
+    amount: number;
+    status: PayoutStatus;
+    releaseAt: string;
+    paidAt: string | null;
+    utr: string | null;
+    holdReason: string | null;
+    failureReason: string | null;
+  }[];
+};

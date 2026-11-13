@@ -10,6 +10,8 @@ import { AppError } from "@/lib/errors";
 import { formatDateTime, formatDay, formatPrice } from "@/lib/format";
 import { bookingCommission } from "@/lib/services/commission";
 import { getBookingForActor } from "@/lib/services/stays/bookings";
+import { bookingMoney } from "@/lib/services/stays/payments";
+import { formatMoney } from "@/lib/format";
 import { conversationForBooking } from "@/lib/services/stays/messages";
 import { BOOKING_ACTIONS, type BookingActionDef } from "@/lib/stays/booking-lifecycle";
 import { BOOKING_STATUS_TONES, nightsLabel, timeLabel } from "@/lib/stays/labels";
@@ -36,7 +38,8 @@ export default async function BookingPage({ params }: Props) {
   const canReview = actor.workspace === "platform" && can(actor, "conversations.view", "platform");
   const conversationRef = actor.workspace === "professional" || canReview ? await conversationForBooking(b.referenceId) : null;
   const canMessage = actor.workspace === "professional" && can(actor, "bookings.manage");
-  const commission = await bookingCommission(actor, b.referenceId);
+  const [commission, cash] = await Promise.all([bookingCommission(actor, b.referenceId), bookingMoney(b.referenceId)]);
+  const PAYOUT_LABEL: Record<string, string> = { scheduled: "Scheduled", on_hold: "On hold", processing: "On its way", paid: "Paid", failed: "Failed", cancelled: "None" };
   const host = actor.workspace === "professional";
   const groups = new Map<number, number>();
   for (const n of b.nightly) groups.set(n.price, (groups.get(n.price) ?? 0) + 1);
@@ -137,13 +140,65 @@ export default async function BookingPage({ params }: Props) {
                 </div>
               )}
               <div className="flex justify-between gap-3 border-t border-line-light pt-2 font-medium">
-                <dt>Guest pays at the property</dt>
+                <dt>{cash ? (cash.state === "held" ? "Guest's payment, on hold" : "Guest paid online") : "Guest pays at the property"}</dt>
                 <dd className="tabular-nums">{money(b.total)}</dd>
               </div>
             </dl>
             <p className="mt-3 text-[0.75rem] text-stone-deep">The price was fixed when the guest booked. Later changes to your prices don&apos;t affect it.</p>
 
-            {commission && (
+            {cash ? (
+              <div className="mt-4 max-w-md border-t border-line-light pt-4 text-[0.875rem]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="font-medium">Money</h3>
+                  {cash.payout && (
+                    <StatusBadge tone={cash.payout.status === "paid" ? "success" : cash.payout.status === "failed" || cash.payout.status === "on_hold" ? "warning" : "neutral"}>
+                      {PAYOUT_LABEL[cash.payout.status]}
+                    </StatusBadge>
+                  )}
+                </div>
+                <dl className="mt-2 space-y-1.5">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-graphite">{cash.state === "held" ? "Guest's payment (held)" : "Guest paid"}</dt>
+                    <dd className="tabular-nums">{formatMoney(cash.paid)}</dd>
+                  </div>
+                  {cash.refunded > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-graphite">Refunded to the guest</dt>
+                      <dd className="tabular-nums">{formatMoney(-cash.refunded)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-graphite">Trustbrick&apos;s commission ({cash.commissionPercent}%)</dt>
+                    <dd className="tabular-nums">{formatMoney(-cash.commission)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-graphite">GST on commission ({cash.gstPercent}%)</dt>
+                    <dd className="tabular-nums">{formatMoney(-cash.gst)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3 border-t border-line-light pt-2 font-medium">
+                    <dt>{host ? "You receive" : "Host receives"}</dt>
+                    <dd className="tabular-nums">{formatMoney(cash.youReceive)}</dd>
+                  </div>
+                </dl>
+                <p className="mt-2 text-[0.75rem] text-stone-deep">
+                  {cash.state === "held"
+                    ? "The guest's payment is held until the request is accepted. Accepting takes it; declining releases it."
+                    : cash.payout?.status === "paid" && cash.payout.paidAt
+                      ? `Paid ${formatDateTime(cash.payout.paidAt)}${cash.payout.utr ? `, bank reference ${cash.payout.utr}` : ""}.`
+                      : cash.payout?.status === "cancelled"
+                        ? "Nothing is paid out: the guest was refunded in full."
+                        : cash.payout?.status === "on_hold"
+                          ? `On hold: ${cash.payout.holdReason ?? "Trustbrick is looking into it."}`
+                          : cash.payout
+                            ? `Paid to the bank account a day after check-in, on ${formatDateTime(cash.payout.releaseAt)}.`
+                            : ""}{" "}
+                  Commission is kept back from the payout; there&apos;s nothing to pay Trustbrick separately.{" "}
+                  <Link href={host ? "/payouts" : "/payments"} className="underline">
+                    {host ? "Your payouts" : "All payments"}
+                  </Link>
+                </p>
+              </div>
+            ) : commission && (
               <div className="mt-4 max-w-md border-t border-line-light pt-4 text-[0.875rem]">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="font-medium">Trustbrick&apos;s commission</h3>

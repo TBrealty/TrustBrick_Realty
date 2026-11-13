@@ -5,6 +5,12 @@ export function formatPrice(amount: number, { compact = true }: { compact?: bool
   return `₹${Math.round(amount).toLocaleString("en-IN")}`;
 }
 
+/** Exact money, to the paisa: ₹1,459.28, ₹1,700.00. For payments, refunds and payouts. */
+export function formatMoney(amount: number): string {
+  const sign = amount < 0 ? "−" : "";
+  return `${sign}₹${Math.abs(amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 const trim = (value: number) => (Math.round(value * 100) / 100).toString();
 
 export function formatArea(sqft: number): string {

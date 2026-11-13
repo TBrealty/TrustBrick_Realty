@@ -32,6 +32,7 @@ export default function More() {
         s?.visits && { icon: "walk-outline", label: "Visits", detail: s.visits.upcoming ? `${s.visits.upcoming} coming up` : undefined, href: "/partner/visits" },
         s?.can.clients && { icon: "person-outline", label: "Clients", detail: "Everyone who's enquired", href: "/partner/clients" },
         s?.can.calendar && { icon: "calendar-number-outline", label: "Calendar", detail: "Block nights, set special prices", href: "/partner/calendar" },
+        s?.can.calendar && s?.can.commission && { icon: "wallet-outline", label: "Payouts", detail: "What you're paid for stays booked online", href: "/partner/payouts" as Href },
         inboxInMore && { icon: "chatbubbles-outline", label: "Messages", href: "/inbox", badge: s?.inbox?.unread },
         s?.can.team && { icon: "people-outline", label: "Team", detail: "People, roles and teams", href: "/partner/team" },
       ],

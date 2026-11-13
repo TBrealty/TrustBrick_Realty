@@ -33,10 +33,37 @@ export type ListingStatus = (typeof LISTING_STATUSES)[number];
 // ── Homestays ──────────────────────────────────────────────────────────────────
 export const SPACE_TYPES = ["entire_home", "private_room"] as const;
 export const CANCELLATION_POLICIES = ["flexible", "moderate", "strict"] as const;
-export const BOOKING_STATUSES = ["requested", "confirmed", "declined", "expired", "cancelled", "checked_in", "completed", "no_show"] as const;
+/**
+ * pending_payment: the guest is paying online; an instant-book stay's dates are held for 15 minutes.
+ * abandoned: the payment never went through, so the booking never happened (left out of lists).
+ */
+export const BOOKING_STATUSES = ["pending_payment", "requested", "confirmed", "declined", "expired", "cancelled", "checked_in", "completed", "no_show", "abandoned"] as const;
 export type BookingStatus = (typeof BOOKING_STATUSES)[number];
-/** Statuses that hold the dates. The bookings exclusion constraint applies to exactly these. */
+/**
+ * Statuses that hold the dates. The bookings exclusion constraint applies to exactly these, and
+ * to an instant-book booking while it is pending_payment (its 15-minute hold).
+ */
 export const HOLDING_STATUSES = ["confirmed", "checked_in", "completed"] as const;
+/** How a booking is paid: at the property (before online payments), or online through Trustbrick. */
+export const PAYMENT_MODES = ["pay_at_property", "online"] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+
+// ── Online payments for stays (lib/payments) ───────────────────────────────────
+export const PAYMENT_PROVIDERS = ["fake", "cashfree"] as const;
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
+/**
+ * created: an order is open, nothing paid. authorized: held on the guest's card or UPI, not taken
+ * (a request waiting for the host). captured: taken. voided: a hold released. refunded and
+ * partially_refunded: money returned or on its way back; the refunds table tracks each return.
+ */
+export const PAYMENT_STATUSES = ["created", "authorized", "captured", "failed", "voided", "partially_refunded", "refunded"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const REFUND_STATUSES = ["pending", "processed", "failed"] as const;
+export type RefundStatus = (typeof REFUND_STATUSES)[number];
+export const PAYOUT_STATUSES = ["scheduled", "on_hold", "processing", "paid", "failed", "cancelled"] as const;
+export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
+export const PAYOUT_ACCOUNT_STATUSES = ["pending", "active", "action_required", "suspended"] as const;
+export type PayoutAccountStatus = (typeof PAYOUT_ACCOUNT_STATUSES)[number];
 
 /** Stay chat: who can write, and how much in one message. */
 export const MESSAGE_SENDER_ROLES = ["guest", "host"] as const;

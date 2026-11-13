@@ -11,6 +11,8 @@ export const LEGAL = {
   registeredOffice: "[Registered office address]",
   /** Corporate Identification Number, from the certificate of incorporation. */
   cin: "[CIN]",
+  /** GST registration, printed on payment receipts. */
+  gstin: "[GSTIN]",
   /** Where people write about privacy, their data and complaints. */
   contactEmail: "[privacy@your-domain]",
   /**

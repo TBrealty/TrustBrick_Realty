@@ -45,6 +45,7 @@ const SECTIONS: SectionDef[] = [
       { label: "Bookings", href: "/bookings", icon: "calendar", permission: "bookings.view", atLeast: "platform", workspace: "platform" },
       { label: "Conversations", href: "/conversations", icon: "chat", permission: "conversations.view", atLeast: "platform" },
       { label: "Commissions", href: "/commissions", icon: "rupee", permission: "commission.view", atLeast: "platform", workspace: "platform", badge: "overdueCommission" },
+      { label: "Payments", href: "/payments", icon: "rupee", permission: "payments.view", atLeast: "platform", workspace: "platform" },
       { label: "Subscriptions", href: "/subscriptions", icon: "spark", permission: "subscriptions.view", atLeast: "platform", workspace: "platform", badge: "pendingSubscriptions" },
       { label: "Legal verification", href: "/legal-requests", icon: "scale", permission: "support.view", atLeast: "platform", badge: "newLegalRequests" },
     ],
@@ -80,6 +81,7 @@ const SECTIONS: SectionDef[] = [
       { label: "Bookings", href: "/bookings", icon: "inbox", permission: "bookings.view", workspace: "professional", hosting: true, badge: "bookingRequests" },
       { label: "Messages", href: "/messages", icon: "chat", permission: "bookings.view", workspace: "professional", hosting: true, badge: "unreadMessages" },
       { label: "Calendar", href: "/calendar", icon: "calendar", permission: "bookings.manage", workspace: "professional", hosting: true },
+      { label: "Payouts", href: "/payouts", icon: "rupee", permission: "commission.view", workspace: "professional", hosting: true },
     ],
   },
   {

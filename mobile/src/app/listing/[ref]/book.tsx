@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useLocalSearchParams } from "expo-router";
+import { type Href, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Switch, View } from "react-native";
 import { ApiError, api } from "@/api/client";
-import type { ListingDetail, Quote } from "@/api/types";
+import type { CheckoutStart, ListingDetail, Quote } from "@/api/types";
+import { openCheckout } from "@/payments/checkout";
+import { policyTimeline, round2 } from "@/lib/payments/rules";
 import { useSession } from "@/auth/session";
 import { RangeCalendar } from "@/components/calendar";
 import { Body, Button, Card, Divider, Field, Loading, Notice, Scroll, Small, Title } from "@/components/ui";
-import { formatDay, formatPrice } from "@/lib/format";
+import { formatDateTime, formatDay, formatMoney, formatPrice } from "@/lib/format";
 import { CANCELLATION_LABELS, nightsLabel } from "@/lib/stays/labels";
 import { useColors } from "@/theme";
 
@@ -58,11 +60,26 @@ export default function Book() {
       router.replace(`/trips/${r.referenceId}`);
     },
   });
+  // Paid online: the server holds the booking and opens an order; the provider's checkout follows.
+  const pay = useMutation({
+    mutationFn: async () => {
+      const start = await api<CheckoutStart>(`/listings/${ref}/checkout`, { method: "POST", body: { checkIn, checkOut, adults, children, pets, name, phone, message, agree } });
+      await openCheckout(start);
+      return start;
+    },
+    onSuccess: (s) => {
+      void queryClient.invalidateQueries({ queryKey: ["trips"] });
+      void queryClient.invalidateQueries({ queryKey: ["availability", ref] });
+      router.replace(`/pay/${s.paymentReferenceId}` as Href);
+    },
+  });
 
   if (listing.isPending || availability.isPending) return <Loading />;
   const stay = listing.data?.stay;
   if (!stay) return <Notice>This listing isn&apos;t a stay.</Notice>;
-  const errors = book.error instanceof ApiError ? (book.error.fieldErrors ?? {}) : {};
+  const online = Boolean(stay.payOnline);
+  const submit = online ? pay : book;
+  const errors = submit.error instanceof ApiError ? (submit.error.fieldErrors ?? {}) : {};
   const q = quote.data;
   const policy = CANCELLATION_LABELS[stay.cancellationPolicy];
 
@@ -119,7 +136,20 @@ export default function Book() {
                   <Title>Total</Title>
                   <Title>{formatPrice(q.total, { compact: false })}</Title>
                 </View>
-                <Small>Paid to the host at the property. Nothing is charged in the app.</Small>
+                {online ? (
+                  <>
+                    <Small>Paid securely when you book. No fees on top.</Small>
+                    {policyTimeline(stay.cancellationPolicy, q.checkIn, stay.checkInTime).map((s) => (
+                      <Small key={s.label}>
+                        {s.label}
+                        {s.to && s.refundPercent === 100 ? ` until ${formatDateTime(s.to.toISOString())}` : s.from ? ` from ${formatDateTime(s.from.toISOString())}` : ""}
+                        {s.refundPercent > 0 ? `: ${formatMoney(round2((q.total * s.refundPercent) / 100))} back` : ""}
+                      </Small>
+                    ))}
+                  </>
+                ) : (
+                  <Small>Paid to the host at the property. Nothing is charged in the app.</Small>
+                )}
               </>
             ) : q ? (
               <Notice tone="warning">{q.message}</Notice>
@@ -127,9 +157,11 @@ export default function Book() {
           </Card>
         )}
 
-        {q && q.ok && (
+        {online && stay.takingBookings === false && <Notice tone="warning">Not taking bookings yet: the host is still setting up how they&apos;re paid.</Notice>}
+
+        {q && q.ok && !(online && stay.takingBookings === false) && (
           <>
-            {book.isError && !Object.keys(errors).length && <Notice>{(book.error as Error).message}</Notice>}
+            {submit.isError && !Object.keys(errors).length && <Notice>{(submit.error as Error).message}</Notice>}
             <Field label="Your name" value={name} onChangeText={setName} error={errors.name} autoComplete="name" />
             <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" error={errors.phone} autoComplete="tel" hint="The host gets it once the booking is confirmed." />
             <Field label="Message to the host (optional)" value={message} onChangeText={setMessage} multiline style={{ minHeight: 80, textAlignVertical: "top" }} error={errors.message} />
@@ -141,12 +173,20 @@ export default function Book() {
             </View>
             {errors.agree && <Small tone="brick">{errors.agree}</Small>}
             <Button
-              label={q.instantBook ? "Book now" : "Request to book"}
+              label={online ? `Pay ${formatMoney(q.total)}` : q.instantBook ? "Book now" : "Request to book"}
               variant="accent"
-              loading={book.isPending}
-              onPress={() => book.mutate()}
+              loading={submit.isPending}
+              onPress={() => submit.mutate()}
             />
-            {!q.instantBook && <Small style={{ textAlign: "center" }}>The host has 24 hours to accept. You&apos;re not charged anything.</Small>}
+            {online ? (
+              <Small style={{ textAlign: "center" }}>
+                {q.instantBook
+                  ? "Paying confirms your stay. We hold these dates for 15 minutes while you pay."
+                  : "The host has 24 hours to accept. Your payment is held, not charged, until they do."}
+              </Small>
+            ) : (
+              !q.instantBook && <Small style={{ textAlign: "center" }}>The host has 24 hours to accept. You&apos;re not charged anything.</Small>
+            )}
           </>
         )}
       </Scroll>

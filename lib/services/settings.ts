@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/authz/actor";
 import { type DbOrTx, db } from "@/lib/db";
 import { systemSettings } from "@/lib/db/schema/platform";
 import { invalid } from "@/lib/errors";
+import { paymentsUnavailableReason } from "@/lib/payments";
 import { type RequestContext, audit } from "./audit";
 
 /** Every platform setting, with its type and meaning. Unknown keys are rejected. */
@@ -18,6 +19,12 @@ export const SETTINGS = {
     label: "Accept new host applications",
     description: "When off, the Become a host page explains that applications are paused. Existing hosts keep hosting.",
     default: true,
+  },
+  "payments.stays_online": {
+    label: "Take payment online for home stays",
+    description:
+      "Guests pay when they book, through the payment provider, and hosts are paid a day after check-in. Stays whose host has no verified payout account can't be booked while this is on. When off, guests pay the host at the property.",
+    default: false,
   },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;
@@ -39,6 +46,10 @@ export async function setSetting(actor: Actor, key: string, value: boolean, ctx:
   assertCan(actor, "settings.manage", "platform");
   if (!(key in SETTINGS)) throw invalid("Unknown setting.");
   const settingKey = key as SettingKey;
+  if (settingKey === "payments.stays_online" && value) {
+    const why = paymentsUnavailableReason();
+    if (why) throw invalid(why);
+  }
   await db.transaction(async (tx) => {
     const before = await getSetting(settingKey, tx);
     if (before === value) return;
