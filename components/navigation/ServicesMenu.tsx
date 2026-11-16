@@ -17,9 +17,10 @@ const ICONS: Record<string, React.ReactNode> = {
 
 /**
  * The Services disclosure: a button that opens a frosted-glass panel of links under it, each with
- * its icon. The hero shows through, blurred. Opens on click (and with Enter, Space or ↓), closes
- * on Escape, on a click outside, or when a link is chosen. Arrow keys move between the links; the
- * section you're in is marked like a hovered one.
+ * its icon. The hero shows through, blurred. With a mouse it opens as the pointer comes over it and
+ * closes a moment after the pointer leaves; on touch, and from the keyboard (Enter, Space or ↓), it
+ * opens on a tap or press. It closes on Escape, on a click outside, or when a link is chosen. Arrow
+ * keys move between the links; the section you're in is marked like a hovered one.
  */
 export function ServicesMenu({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
@@ -28,11 +29,31 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const linksRef = useRef<(HTMLAnchorElement | null)[]>([]);
+  // Opened by the pointer coming over it: the click that usually follows mustn't shut it again.
+  const openedByHover = useRef(false);
+  const leaveTimer = useRef<number | undefined>(undefined);
 
   const close = useCallback((restoreFocus: boolean) => {
     setOpen(false);
     if (restoreFocus) buttonRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!open) openedByHover.current = false;
+  }, [open]);
+  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
+
+  const onPointerEnter = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
+    window.clearTimeout(leaveTimer.current);
+    if (!open) openedByHover.current = true;
+    setOpen(true);
+  };
+  const onPointerLeave = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
+    window.clearTimeout(leaveTimer.current);
+    leaveTimer.current = window.setTimeout(() => setOpen(false), 200);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -106,13 +127,19 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
   };
 
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
+    <div ref={rootRef} className={`relative ${className}`} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave}>
       <button
         ref={buttonRef}
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (openedByHover.current) {
+            openedByHover.current = false;
+            return;
+          }
+          setOpen((o) => !o);
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
@@ -132,7 +159,7 @@ export function ServicesMenu({ className = "" }: { className?: string }) {
         id={panelId}
         onKeyDown={onPanelKey}
         hidden={!open}
-        className="services-panel menu-in absolute top-full left-0 z-50 mt-3.5 w-max min-w-[13.5rem] rounded-2xl border border-white/[0.14] bg-[rgb(18_21_27/0.6)] p-1.5 text-white shadow-[0_30px_60px_-20px_rgb(0_0_0/0.6),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150"
+        className="services-panel menu-in absolute top-full left-0 z-50 mt-3.5 w-max before:absolute before:inset-x-0 before:-top-3.5 before:h-3.5 before:content-[''] min-w-[13.5rem] rounded-2xl border border-white/[0.14] bg-[rgb(18_21_27/0.6)] p-1.5 text-white shadow-[0_30px_60px_-20px_rgb(0_0_0/0.6),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150"
       >
         <ul className="space-y-0.5">{SERVICES.map((e, i) => item(e, i))}</ul>
         <div aria-hidden className="mx-2.5 my-1.5 border-t border-white/10" />
