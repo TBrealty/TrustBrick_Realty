@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookingPanel } from "@/components/listings/BookingPanel";
 import { BookmarkButton } from "@/components/listings/BookmarkButton";
+import { AmenityList, type FactItem, FactGroups, FactTiles, groupFacts } from "@/components/listings/FactTiles";
 import { ListingActionBar } from "@/components/listings/ListingActionBar";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { ListingGallery } from "@/components/listings/ListingGallery";
@@ -188,6 +189,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
         : null,
     ] as ([string, string] | null)[]
   ).filter((f): f is [string, string] => f !== null);
+  const projectFacts: FactItem[] = [
+    listing.projectName ? ["Project", listing.projectName] : null,
+    listing.projectStatus ? ["Status", titleCase(listing.projectStatus)] : null,
+    listing.possessionDate ? ["Possession", formatDate(listing.possessionDate, { month: "long", year: "numeric" })] : null,
+    listing.reraId ? ["RERA registration", listing.reraId] : null,
+  ].filter((f): f is FactItem => f !== null);
+  const detailGroups = groupFacts(facts, tiles.map(([label]) => label), projectFacts);
 
   // A listing inside a dedicated service (a flat or plot for sale: Buy) stays in that service.
   const shell = shellFor(kind);
@@ -355,18 +363,22 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <>
                 <section className="mt-10 border-t border-line-light pt-8">
                   <h2 className="text-[1.125rem] font-medium">The stay</h2>
-                  <dl className="mt-4 grid gap-x-8 gap-y-3 text-[0.9375rem] sm:grid-cols-2">
-                    <Fact label="Guests get" value={SPACE_TYPE_LABELS[stay.spaceType].label} />
-                    <Fact label="Sleeps" value={`Up to ${stay.maxGuests} guests · ${stay.beds} bed${stay.beds === 1 ? "" : "s"}`} />
-                    <Fact label="Check-in" value={`From ${timeLabel(stay.checkInTime)}`} />
-                    <Fact label="Check-out" value={`By ${timeLabel(stay.checkOutTime)}`} />
-                    <Fact label="Stay length" value={stay.minNights === stay.maxNights ? `${stay.minNights} nights` : `${stay.minNights} to ${stay.maxNights} nights`} />
-                    <Fact label="Booking" value={stay.instantBook ? "Instant book" : "The host approves each request"} />
-                    <Fact label="Pets" value={stay.petsAllowed ? "Allowed" : "Not allowed"} />
-                    <Fact label="Smoking" value={stay.smokingAllowed ? "Allowed" : "Not allowed"} />
-                    <Fact label="Parties and events" value={stay.eventsAllowed ? "Allowed" : "Not allowed"} />
-                    {stay.weekendPrice && <Fact label="Weekend nights" value={`${formatPrice(stay.weekendPrice, { compact: false })}/night`} />}
-                  </dl>
+                  <div className="mt-4">
+                    <FactTiles
+                      facts={[
+                        ["Guests get", SPACE_TYPE_LABELS[stay.spaceType].label],
+                        ["Sleeps", `Up to ${stay.maxGuests} guests · ${stay.beds} bed${stay.beds === 1 ? "" : "s"}`],
+                        ["Check-in", `From ${timeLabel(stay.checkInTime)}`],
+                        ["Check-out", `By ${timeLabel(stay.checkOutTime)}`],
+                        ["Stay length", stay.minNights === stay.maxNights ? `${stay.minNights} nights` : `${stay.minNights} to ${stay.maxNights} nights`],
+                        ["Booking", stay.instantBook ? "Instant book" : "The host approves each request"],
+                        ["Pets", stay.petsAllowed ? "Allowed" : "Not allowed"],
+                        ["Smoking", stay.smokingAllowed ? "Allowed" : "Not allowed"],
+                        ["Parties and events", stay.eventsAllowed ? "Allowed" : "Not allowed"],
+                        ...(stay.weekendPrice ? [["Weekend nights", `${formatPrice(stay.weekendPrice, { compact: false })}/night`] as FactItem] : []),
+                      ]}
+                    />
+                  </div>
                   <p className="mt-4 text-[0.875rem] text-stone-deep">{SPACE_TYPE_LABELS[stay.spaceType].hint} The exact address is shared once your booking is confirmed.</p>
                 </section>
                 {stay.houseRules && (
@@ -470,105 +482,36 @@ export default async function ListingPage({ params, searchParams }: Props) {
                     </tbody>
                   </table>
                 </div>
-                <dl className="mt-6 grid gap-x-8 gap-y-3 text-[0.9375rem] sm:grid-cols-2">
-                  <Fact
-                    label="For"
-                    value={GENDER_LABEL[listing.genderPolicy ?? ""] ?? "—"}
+                <div className="mt-6">
+                  <FactTiles
+                    facts={[
+                      ["For", GENDER_LABEL[listing.genderPolicy ?? ""] ?? "—"],
+                      ["Meals", MEALS_LABEL[listing.meals ?? "none"]],
+                      ...(listing.foodPreference ? [["Food", FOOD_LABEL[listing.foodPreference]] as FactItem] : []),
+                      ["Rooms / beds", `${listing.pg.totalRooms} rooms · ${listing.pg.totalBeds} beds`],
+                      ...(listing.pg.noticePeriodDays !== null ? [["Notice period", `${listing.pg.noticePeriodDays} days`] as FactItem] : []),
+                      ["Lock-in", listing.pg.lockInMonths ? `${listing.pg.lockInMonths} months` : "None"],
+                      ...(listing.pg.entryCurfew ? [["Entry by", listing.pg.entryCurfew] as FactItem] : []),
+                      ["Visitors", listing.pg.visitorsAllowed ? "Allowed" : "Not allowed"],
+                      ...detailGroups.flatMap((g) => g.facts),
+                    ]}
                   />
-                  <Fact
-                    label="Meals"
-                    value={MEALS_LABEL[listing.meals ?? "none"]}
-                  />
-                  {listing.foodPreference && (
-                    <Fact
-                      label="Food"
-                      value={FOOD_LABEL[listing.foodPreference]}
-                    />
-                  )}
-                  <Fact
-                    label="Rooms / beds"
-                    value={`${listing.pg.totalRooms} rooms · ${listing.pg.totalBeds} beds`}
-                  />
-                  {listing.pg.noticePeriodDays !== null && (
-                    <Fact
-                      label="Notice period"
-                      value={`${listing.pg.noticePeriodDays} days`}
-                    />
-                  )}
-                  <Fact
-                    label="Lock-in"
-                    value={
-                      listing.pg.lockInMonths
-                        ? `${listing.pg.lockInMonths} months`
-                        : "None"
-                    }
-                  />
-                  {listing.pg.entryCurfew && (
-                    <Fact label="Entry by" value={listing.pg.entryCurfew} />
-                  )}
-                  <Fact
-                    label="Visitors"
-                    value={
-                      listing.pg.visitorsAllowed ? "Allowed" : "Not allowed"
-                    }
-                  />
-                </dl>
+                </div>
               </section>
             )}
 
-            {facts.length > 0 && (
+            {/* A PG's few building facts sit with its own, under Rooms and rent. */}
+            {!listing.pg && detailGroups.some((g) => g.facts.length > 0) && (
               <section className="mt-10 border-t border-line-light pt-8">
-                <h2 className="text-[1.125rem] font-medium">Details</h2>
-                <dl className="mt-4 grid gap-x-8 gap-y-3 text-[0.9375rem] sm:grid-cols-2">
-                  {facts.map(([label, value]) => (
-                    <Fact key={label} label={label} value={value} />
-                  ))}
-                </dl>
-              </section>
-            )}
-
-            {(listing.projectName || listing.reraId) && (
-              <section className="mt-10 border-t border-line-light pt-8">
-                <h2 className="text-[1.125rem] font-medium">Project</h2>
-                <dl className="mt-4 grid gap-x-8 gap-y-3 text-[0.9375rem] sm:grid-cols-2">
-                  {listing.projectName && (
-                    <Fact label="Project" value={listing.projectName} />
-                  )}
-                  {listing.projectStatus && (
-                    <Fact
-                      label="Status"
-                      value={titleCase(listing.projectStatus)}
-                    />
-                  )}
-                  {listing.possessionDate && (
-                    <Fact
-                      label="Possession"
-                      value={formatDate(listing.possessionDate, {
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    />
-                  )}
-                  {listing.reraId && (
-                    <Fact label="RERA registration" value={listing.reraId} />
-                  )}
-                </dl>
+                <h2 className="mb-4 text-[1.125rem] font-medium">Details</h2>
+                <FactGroups groups={detailGroups} />
               </section>
             )}
 
             {listing.amenities.length > 0 && (
               <section className="mt-10 border-t border-line-light pt-8">
                 <h2 className="text-[1.125rem] font-medium">Amenities</h2>
-                <ul className="mt-4 flex flex-wrap gap-2">
-                  {listing.amenities.map((a) => (
-                    <li
-                      key={a.code}
-                      className="rounded-full border border-line-light bg-paper px-3.5 py-1.5 text-[0.875rem]"
-                    >
-                      {a.name}
-                    </li>
-                  ))}
-                </ul>
+                <AmenityList amenities={listing.amenities} />
               </section>
             )}
 
@@ -836,11 +779,3 @@ const TILE_COLUMNS: Record<number, string> = { 1: "sm:grid-cols-1", 2: "sm:grid-
 
 const SIMILAR_NOUN: Record<string, string> = { buy: "homes for sale", rent: "homes for rent", pg: "PGs", stay: "stays", invest: "properties" };
 
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-line-light pb-2 sm:block sm:border-b-0 sm:pb-0">
-      <dt className="text-stone-deep">{label}</dt>
-      <dd className="text-right sm:mt-0.5 sm:text-left">{value}</dd>
-    </div>
-  );
-}
