@@ -26,6 +26,7 @@
     "@aws-sdk/client-s3": "^3.1147.0",
     "@aws-sdk/client-sesv2": "^3.1147.0",
     "@google/model-viewer": "^4.3.1",
+    "@phosphor-icons/react": "^2.1.10",
     "@photo-sphere-viewer/core": "^5.15.1",
     "@photo-sphere-viewer/gyroscope-plugin": "^5.15.1",
     "better-auth": "^1.7.5",

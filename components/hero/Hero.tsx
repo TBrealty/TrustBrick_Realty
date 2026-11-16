@@ -1,12 +1,22 @@
+import { Cube, HouseLine, Scales, SealCheck } from "@phosphor-icons/react/ssr";
 import { Lines } from "@/components/typography/Lines";
 import { HeroMedia } from "./HeroMedia";
 import { HeroSearch } from "./HeroSearch";
+import { HeroVideoToggle } from "./HeroVideo";
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
+/** What makes Trustbrick different, in four lines under the search. */
+const TRUST = [
+  { Icon: SealCheck, label: "Every listing checked", href: "/#trust" },
+  { Icon: Cube, label: "360° tours & 3D views", href: "/buy?tour=1" },
+  { Icon: Scales, label: "Legal verification", href: "/legal-verification" },
+  { Icon: HouseLine, label: "Verified homestay hosts", href: "/stays" },
+];
+
 /**
- * The landing page's opening: the skyline, the promise, and straight into a search, centred.
- * The entrance is CSS only and over in about a second: the photograph eases in, the headline
+ * The landing page's opening: a film of homes and the city, the promise, and straight into a
+ * search, centred. The entrance is CSS only and over in about a second: the picture eases in, the headline
  * rises line by line, and the subtitle and search box glide up into place. Nothing a visitor
  * needs is ever hidden: on a slow phone the first frame can stay on screen while JavaScript
  * loads, so the search box is visible (and usable) from that first frame.
@@ -25,6 +35,8 @@ export function Hero({ locations }: { locations: { slug: string; name: string }[
         <div aria-hidden className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-contrast/70 to-transparent" />
         <div aria-hidden className="absolute inset-0 bg-linear-to-t from-contrast via-contrast/55 to-contrast/10" />
         <div aria-hidden className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_100%,rgb(13_17_25/0.7),transparent_60%)]" />
+        {/* A soft pool of shade behind the words, so they read over the film's brighter frames. */}
+        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(55%_42%_at_50%_45%,rgb(13_17_25/0.42),transparent_75%)]" />
       </div>
 
       <div className="shell flex flex-1 flex-col justify-end pt-32 pb-8 sm:pb-10">
@@ -47,18 +59,40 @@ export function Hero({ locations }: { locations: { slug: string; name: string }[
               Join Trustbrick →
             </a>
           </p>
+
+          <ul
+            className="hero-rise mx-auto mt-6 grid max-w-[62rem] grid-cols-2 gap-x-4 gap-y-3 border-t border-on-contrast/15 pt-5 text-left sm:mt-7 lg:grid-cols-4 lg:gap-0 lg:text-center"
+            style={d(560)}
+            aria-label="Why Trustbrick"
+          >
+            {TRUST.map(({ Icon, label, href }, i) => (
+              <li key={label} className={i > 0 ? "lg:border-l lg:border-on-contrast/12" : ""}>
+                <a
+                  href={href}
+                  className="inline-flex items-center gap-2.5 text-[0.8125rem] font-medium text-on-contrast/90 transition-colors hover:text-on-contrast sm:text-[0.875rem] lg:justify-center"
+                >
+                  <Icon size={21} weight="light" aria-hidden className="shrink-0 text-brick-bright" />
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div className="mt-10 sm:mt-12">
           <div aria-hidden className="h-px bg-on-contrast/20" />
           <div className="flex items-center justify-between pt-5 text-on-contrast/60">
             <p className="eyebrow">Realty · Technology · Finance</p>
-            <a href="#explore" aria-label="Scroll to the next section" className="eyebrow flex items-center gap-3 transition-colors hover:text-on-contrast">
-              <span aria-hidden className="hidden sm:inline">Scroll</span>
-              <span aria-hidden className="relative block h-8 w-px overflow-hidden bg-on-contrast/15">
-                <span className="scroll-cue absolute inset-0 bg-on-contrast/80" />
-              </span>
-            </a>
+            <HeroVideoToggle
+              fallback={
+                <a href="#explore" aria-label="Scroll to the next section" className="eyebrow flex items-center gap-3 transition-colors hover:text-on-contrast">
+                  <span aria-hidden className="hidden sm:inline">Scroll</span>
+                  <span aria-hidden className="relative block h-8 w-px overflow-hidden bg-on-contrast/15">
+                    <span className="scroll-cue absolute inset-0 bg-on-contrast/80" />
+                  </span>
+                </a>
+              }
+            />
           </div>
         </div>
       </div>

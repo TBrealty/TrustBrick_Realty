@@ -6,7 +6,7 @@
  * Static imports give Next.js intrinsic dimensions (no layout shift) and an
  * automatic blur placeholder.
  */
-import heroSkyline from "@/public/images/hero/hero-skyline-dusk.jpg";
+import heroFirstFrame from "@/public/images/hero/hero-montage-first-frame.jpg";
 import cityNight from "@/public/images/architecture/city-night.jpg";
 import concreteCurve from "@/public/images/architecture/concrete-curve.jpg";
 import modernistFacade from "@/public/images/architecture/modernist-facade.jpg";
@@ -17,8 +17,8 @@ import residenceDusk from "@/public/images/properties/residence-dusk.jpg";
 
 export const images = {
   hero: {
-    src: heroSkyline,
-    alt: "A dense city skyline silhouetted against an ember-coloured sky at dusk.",
+    src: heroFirstFrame,
+    alt: "Mumbai's skyline from above at blue hour, the towers' lights coming on.",
   },
   future: {
     src: cityNight,
