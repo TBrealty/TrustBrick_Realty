@@ -26,10 +26,16 @@ export default function PartnerLayout() {
   const s = summary.data;
   const hasBookings = Boolean(s?.bookings && (s.bookings.counts.all > 0 || s.inbox));
   const inboxTab = Boolean(s?.inbox) && !(s?.leads && hasBookings);
+  // A landlord and nothing else: their properties are home.
+  const landlordOnly = Boolean(s?.rent && !s.listings && !s.leads && !s.bookings);
   return (
     <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false, animation: "shift" }}>
-      <Tabs.Screen name="today" options={{ title: "Today", tabBarIcon: icon("sunny-outline", "sunny") }} />
+      <Tabs.Screen name="today" options={{ title: "Today", tabBarIcon: icon("sunny-outline", "sunny"), href: landlordOnly ? null : undefined }} />
       <Tabs.Screen name="listings" options={{ title: "Properties", tabBarIcon: icon("business-outline", "business"), href: s && !s.listings ? null : undefined }} />
+      <Tabs.Screen
+        name="landlord"
+        options={{ title: s?.listings ? "Owned" : "My properties", tabBarIcon: icon("key-outline", "key"), href: s?.rent ? undefined : null, tabBarBadge: s?.rent?.waiting || undefined }}
+      />
       <Tabs.Screen name="leads" options={{ title: "Leads", tabBarIcon: icon("people-outline", "people"), href: s?.leads ? undefined : null, tabBarBadge: s?.leads?.new || undefined }} />
       <Tabs.Screen name="bookings" options={{ title: "Bookings", tabBarIcon: icon("calendar-outline", "calendar"), href: hasBookings ? undefined : null, tabBarBadge: s?.bookings?.counts.requests || undefined }} />
       <Tabs.Screen name="inbox" options={{ title: "Messages", tabBarIcon: icon("chatbubbles-outline", "chatbubbles"), href: inboxTab ? undefined : null, tabBarBadge: s?.inbox?.unread || undefined }} />

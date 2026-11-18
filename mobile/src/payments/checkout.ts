@@ -1,5 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
-import type { CheckoutStart } from "@/api/types";
+import type { PaymentCheckout } from "@/api/types";
 
 /**
  * Opens the payment provider's checkout for an order the server just made, and resolves once the
@@ -9,7 +9,7 @@ import type { CheckoutStart } from "@/api/types";
  * - "redirect": a web checkout (the test provider in development) in an in-app browser session.
  * - "cashfree": Cashfree's native SDK, added to the app together with the Cashfree connection.
  */
-export async function openCheckout(start: CheckoutStart): Promise<void> {
+export async function openCheckout(start: { checkout: PaymentCheckout }): Promise<void> {
   if (start.checkout.kind === "redirect") {
     await WebBrowser.openAuthSessionAsync(start.checkout.url, "trustbrick://pay");
     return;

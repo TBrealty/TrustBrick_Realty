@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router, useLocalSearchParams } from "expo-router";
+import { type Href, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, TextInput, View } from "react-native";
 import { api, assetUrl, authHeaders } from "@/api/client";
-import type { PartnerListing } from "@/api/types";
+import type { PartnerListing, PartnerSummary } from "@/api/types";
+import { useSession } from "@/auth/session";
 import { Badge, Body, Button, Card, Display, ErrorState, Eyebrow, Field, Loading, Notice, Scroll, Small, Title } from "@/components/ui";
 import { API_ORIGIN } from "@/config";
 import { confirm } from "@/confirm";
@@ -73,6 +74,8 @@ export default function PartnerListingScreen() {
   const queryClient = useQueryClient();
   const uploads = useUploads(ref).filter((u) => u.kind === "panorama" || u.kind === "model_3d" || u.kind === "capture");
   const [more, setMore] = useState(false);
+  const { workspace } = useSession();
+  const summary = useQuery({ queryKey: ["partner-summary", workspace], queryFn: () => api<PartnerSummary>("/partner/summary") });
   const listing = useQuery({
     queryKey: ["partner-listing", ref],
     queryFn: () => api<PartnerListing>(`/partner/listings/${ref}`),
@@ -151,6 +154,14 @@ export default function PartnerListingScreen() {
         ))}
       </View>
       {l.publicUrl && <Button label="See it as customers do" variant="ghost" compact icon="open-outline" onPress={() => router.push(`/listing/${l.referenceId}`)} />}
+
+      {(l.purpose === "rent" || l.purpose === "lease") && summary.data?.can.rent && (
+        <Card>
+          <Title>Landlord and rent</Title>
+          <Small>Add the landlord and set up the tenancy: the tenant pays rent online, and Trustbrick pays it to the landlord.</Small>
+          <Button label="Open" compact variant="secondary" icon="key-outline" onPress={() => router.push(`/partner/rent/${l.referenceId}` as Href)} />
+        </Card>
+      )}
 
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>

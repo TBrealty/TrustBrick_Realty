@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { type Href, router } from "expo-router";
+import { type Href, Redirect, router } from "expo-router";
 import { useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -39,6 +39,8 @@ export default function Today() {
 
   if (summary.isError) return <ErrorState error={summary.error} onRetry={() => summary.refetch()} />;
   const s = summary.data;
+  // Someone who's only a landlord has no listings or leads: their home is My properties.
+  if (s?.rent && !s.listings && !s.leads && !s.bookings) return <Redirect href={"/landlord" as Href} />;
   const d = dash.data;
   const firstName = me?.user.name?.split(" ")[0];
 

@@ -38,6 +38,13 @@ export default function More() {
       ],
     },
     {
+      title: "Rent",
+      rows: [
+        s?.rent && { icon: "cash-outline", label: "Rent received", detail: "When your rent reached your bank", href: "/partner/landlord/received" as Href },
+        s?.rent && { icon: "card-outline", label: "Bank account and PAN", detail: "Where your rent is paid", href: "/partner/landlord/bank" as Href },
+      ],
+    },
+    {
       title: "Business",
       rows: [
         s?.can.performance && { icon: "stats-chart-outline", label: "Performance", detail: "Views, leads and visits by listing", href: "/partner/performance" },

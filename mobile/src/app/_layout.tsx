@@ -106,6 +106,15 @@ export default function RootLayout() {
             <Stack.Screen name="partner/commission" options={{ title: "Commission" }} />
             <Stack.Screen name="partner/subscription" options={{ title: "Subscription" }} />
             <Stack.Screen name="partner/performance" options={{ title: "Performance" }} />
+            <Stack.Screen name="rent/index" options={{ title: "Rent" }} />
+            <Stack.Screen name="rent/pay/[ref]" options={{ title: "Rent payment", headerBackVisible: false }} />
+            <Stack.Screen name="rent/receipt/[ref]" options={{ title: "Rent receipt" }} />
+            <Stack.Screen name="partner/rent/[ref]/index" options={{ title: "Landlord and rent" }} />
+            <Stack.Screen name="partner/rent/[ref]/landlord" options={{ title: "Add the landlord", presentation: "modal" }} />
+            <Stack.Screen name="partner/rent/[ref]/tenancy" options={{ title: "Tenancy", presentation: "modal" }} />
+            <Stack.Screen name="partner/landlord/property/[ref]" options={{ title: "Property" }} />
+            <Stack.Screen name="partner/landlord/bank" options={{ title: "Bank account" }} />
+            <Stack.Screen name="partner/landlord/received" options={{ title: "Rent received" }} />
             <Stack.Screen name="security" options={{ title: "Profile & security" }} />
           </Stack>
         </ThemeProvider>

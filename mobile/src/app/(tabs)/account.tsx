@@ -78,6 +78,12 @@ export default function Account() {
         <Card style={{ paddingVertical: 4, gap: 0 }}>
           <Row icon="bed-outline" label="Your stays" onPress={go("/trips")} />
           <Divider />
+          {me.tenant && (
+            <>
+              <Row icon="home-outline" label="Rent" detail="Pay rent, see receipts" onPress={go("/rent" as Href)} />
+              <Divider />
+            </>
+          )}
           <Row icon="chatbubbles-outline" label="Messages" detail={me.unreadMessages ? `${me.unreadMessages} new` : undefined} onPress={() => router.navigate("/messages")} />
           <Divider />
           <Row icon="heart-outline" label="Saved homes" onPress={() => router.navigate("/saved")} />
@@ -89,9 +95,9 @@ export default function Account() {
 
         {partnerSpaces.length > 0 && (
           <Card>
-            <Title>Agent and host tools</Title>
+            <Title>Agent, host and landlord tools</Title>
             <Body tone="graphite">
-              Your leads, visits, bookings, guest messages and listings, and recording virtual tours on site.
+              Your leads, visits, bookings, guest messages and listings, the homes you rent out, and recording virtual tours on site.
             </Body>
             <Button
               label="Switch to partner mode"

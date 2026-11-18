@@ -25,6 +25,8 @@ export type Me = {
   };
   unreadNotifications: number;
   unreadMessages: number;
+  /** They rent a home through Trustbrick. */
+  tenant?: boolean;
 };
 
 export type SignInResult = { token: string; expiresAt: string; user: Me["user"] };
@@ -226,7 +228,8 @@ export type PartnerSummary = {
   bookings: { counts: Record<BookingGroup, number>; requests: HostBooking[] } | null;
   inbox: { unread: number } | null;
   listings: Record<string, number> | null;
-  can: { onboard: boolean; performance: boolean; clients: boolean; team: boolean; commission: boolean; subscription: boolean; calendar: boolean };
+  rent?: { properties: number; waiting: number } | null;
+  can: { onboard: boolean; performance: boolean; clients: boolean; team: boolean; commission: boolean; subscription: boolean; calendar: boolean; rent?: boolean };
 };
 
 export type PartnerListingRow = {
