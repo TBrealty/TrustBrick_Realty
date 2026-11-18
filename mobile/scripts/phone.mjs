@@ -2,13 +2,16 @@
 //
 //   npm run phone:update    build the app with its code inside (a release build) and install it;
 //                           run again after any change to update the app on the phone
+//   npm run phone:live      the same, but talking to the live site (https://trustbrick.org): no
+//                           cable or local website needed once it's installed
 //   npm run phone:connect   after re-plugging the cable: forward the website (and dev server) again
 //   npm run phone:dev       switch back to the development build (live reload from `npx expo start`)
 //
 // The phone reaches the website on this computer at http://localhost:3000 over the cable, so keep
 // the website running (`npm run dev` at the repository root). Needs ANDROID_HOME (the Android SDK).
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 const PACKAGE = "in.trustbrick.app";
@@ -63,6 +66,11 @@ function install(file) {
 }
 
 function gradle(task, env = {}) {
+  // Gradle doesn't see EXPO_PUBLIC_API_URL change, so a bundle made for the other address would be
+  // reused (local ↔ live). Remove it: the JavaScript is bundled again for this build's address.
+  // Metro's cache would hand back code with the old address inlined too.
+  for (const dir of ["generated/assets/react", "intermediates/assets"]) rmSync(path.join(androidDir, "app", "build", dir), { recursive: true, force: true });
+  rmSync(path.join(tmpdir(), "metro-cache"), { recursive: true, force: true });
   run(gradlew, [task, "-x", "lint", "-x", "test", "--build-cache", "-PreactNativeArchitectures=arm64-v8a"], { cwd: androidDir, env });
   // The computer is short on memory: don't leave Gradle's background process running.
   run(gradlew, ["--stop"], { cwd: androidDir, quiet: true });
@@ -80,6 +88,18 @@ if (command === "connect") {
   gradle("app:assembleRelease", env);
   install(apk("release"));
   console.log(`\n✓ Updated. The app opens on ${where}; its code is inside it now.`);
+} else if (command === "live") {
+  // No TRUSTBRICK_LOCAL_RELEASE: https only, like a store build.
+  const env = { EXPO_PUBLIC_API_URL: "https://trustbrick.org", NODE_ENV: "production" };
+  step("Preparing the Android project");
+  run("npx", ["expo", "prebuild", "--platform", "android", "--no-clean", "--no-install"], { env });
+  step("Building the app for the live site");
+  gradle("app:assembleRelease", env);
+  step(`Installing on ${where}`);
+  adb("install", "-r", `"${apk("release")}"`);
+  adb("shell", "am", "start", "-n", `${PACKAGE}/.MainActivity`);
+  console.log(`
+✓ Updated. The app on ${where} now uses https://trustbrick.org; sign in with your live account.`);
 } else if (command === "dev") {
   if (!existsSync(apk("debug"))) {
     step("Building the development app");
@@ -89,5 +109,5 @@ if (command === "connect") {
   install(apk("debug"));
   console.log("\n✓ Development build installed. Start `npx expo start --dev-client`, then open the app and pick http://localhost:8081.");
 } else {
-  console.log("Usage: npm run phone:update | phone:connect | phone:dev");
+  console.log("Usage: npm run phone:update | phone:live | phone:connect | phone:dev");
 }

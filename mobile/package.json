@@ -59,6 +59,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "phone:update": "node scripts/phone.mjs update",
+    "phone:live": "node scripts/phone.mjs live",
     "phone:connect": "node scripts/phone.mjs connect",
     "phone:dev": "node scripts/phone.mjs dev"
   },
