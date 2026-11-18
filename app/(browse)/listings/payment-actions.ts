@@ -44,7 +44,10 @@ export async function fakePayAction(form: FormData) {
   const order = text(form, "order");
   const outcome = text(form, "outcome") as FakeOutcome;
   if (!session || driver?.name !== "fake" || !(outcome in FAKE_OUTCOMES)) redirect("/");
-  const { rows } = await db.execute(sql`SELECT capture, amount, status FROM finance.payments WHERE provider_order_id = ${order} AND guest_user_id = ${session.user.id}`);
+  const { rows } = await db.execute(sql`
+    SELECT capture, amount, status FROM finance.payments WHERE provider_order_id = ${order} AND guest_user_id = ${session.user.id}
+    UNION ALL
+    SELECT 'auto', amount, status FROM rent.payments WHERE provider_order_id = ${order} AND tenant_user_id = ${session.user.id}`);
   const p = rows[0] as { capture: "auto" | "manual"; amount: string; status: string } | undefined;
   if (p && p.status === "created") {
     const hook = fakeWebhook(order, outcome, p.capture, Number(p.amount));

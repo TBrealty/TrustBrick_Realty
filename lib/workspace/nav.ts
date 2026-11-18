@@ -26,7 +26,7 @@ type NavDef = {
 };
 type SectionDef = { label?: string; items: NavDef[] };
 
-type BadgeKey = "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue" | "pendingSubscriptions" | "joinRequests";
+type BadgeKey = "rentQueue" | "rentRequests" | "reviewQueue" | "openReports" | "pendingAgents" | "pendingOrganizations" | "attention" | "newLeads" | "requestedVisits" | "bookingRequests" | "pendingHosts" | "openMessages" | "unreadMessages" | "newLegalRequests" | "overdueCommission" | "commissionDue" | "pendingSubscriptions" | "joinRequests";
 
 const scopeLabel = (actor: Actor, own: string, team: string, org: string) => {
   const s = actor.permissions["listings.view"];
@@ -46,6 +46,7 @@ const SECTIONS: SectionDef[] = [
       { label: "Conversations", href: "/conversations", icon: "chat", permission: "conversations.view", atLeast: "platform" },
       { label: "Commissions", href: "/commissions", icon: "rupee", permission: "commission.view", atLeast: "platform", workspace: "platform", badge: "overdueCommission" },
       { label: "Payments", href: "/payments", icon: "rupee", permission: "payments.view", atLeast: "platform", workspace: "platform" },
+      { label: "Rent", href: "/rent-collection", icon: "home", permission: "rent.view", atLeast: "platform", workspace: "platform", badge: "rentQueue" },
       { label: "Subscriptions", href: "/subscriptions", icon: "spark", permission: "subscriptions.view", atLeast: "platform", workspace: "platform", badge: "pendingSubscriptions" },
       { label: "Legal verification", href: "/legal-requests", icon: "scale", permission: "support.view", atLeast: "platform", badge: "newLegalRequests" },
     ],
@@ -85,6 +86,14 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
+    label: "Rent",
+    items: [
+      { label: (a) => (can(a, "listings.view") ? "Properties I own" : "My properties"), href: "/my-properties", icon: "home", permission: "rent.receive", workspace: "professional", badge: "rentRequests" },
+      { label: "Rent received", href: "/rent-received", icon: "rupee", permission: "rent.receive", workspace: "professional" },
+      { label: "Bank account", href: "/bank-account", icon: "briefcase", permission: "rent.receive", workspace: "professional" },
+    ],
+  },
+  {
     label: "CRM",
     items: [
       { label: "Leads", href: "/leads", icon: "inbox", permission: "leads.view", badge: "newLeads" },
@@ -100,7 +109,8 @@ const SECTIONS: SectionDef[] = [
     label: "Insights",
     items: [
       { label: "Commission", href: "/commission", icon: "rupee", permission: "commission.view", workspace: "professional", badge: "commissionDue" },
-      { label: "Subscription", href: "/subscription", icon: "spark", permission: "dashboard.view", workspace: "professional" },
+      // Plans are for those who list; a landlord only receives rent.
+      { label: "Subscription", href: "/subscription", icon: "spark", permission: "listings.view", workspace: "professional" },
       { label: (a) => (a.workspace === "platform" ? "Analytics" : "Performance"), href: "/analytics", icon: "chart", permission: "analytics.view" },
     ],
   },
@@ -195,6 +205,16 @@ async function badgeCounts(actor: Actor, wanted: Set<BadgeKey>): Promise<Partial
   }
   if (wanted.has("pendingSubscriptions")) parts.push(sql`(SELECT count(*) FROM finance.subscriptions WHERE status = 'pending_payment')::int AS "pendingSubscriptions"`);
   if (wanted.has("newLegalRequests")) parts.push(sql`(SELECT count(*) FROM platform.legal_requests WHERE status = 'new')::int AS "newLegalRequests"`);
+  if (wanted.has("rentQueue")) {
+    // Proofs to check, bank accounts to verify, and rent ready to settle from the back office.
+    parts.push(sql`((SELECT count(*) FROM rent.property_landlords WHERE status = 'under_review')
+                   + (SELECT count(*) FROM rent.landlord_bank_accounts WHERE status = 'pending')
+                   + (SELECT count(*) FROM rent.settlements WHERE status IN ('ready', 'failed')))::int AS "rentQueue"`);
+  }
+  if (wanted.has("rentRequests")) {
+    parts.push(sql`((SELECT count(*) FROM rent.landlord_invitations WHERE landlord_user_id = ${actor.userId} AND kind = 'existing' AND status = 'pending' AND expires_at > now())
+                   + (SELECT count(*) FROM rent.tenancies WHERE landlord_user_id = ${actor.userId} AND status = 'pending' AND landlord_confirmed_at IS NULL))::int AS "rentRequests"`);
+  }
   if (wanted.has("pendingHosts")) parts.push(sql`(SELECT count(*) FROM stays.host_profiles WHERE status = 'pending')::int AS "pendingHosts"`);
   if (parts.length === 0) return {};
   const { rows } = await db.execute(sql`SELECT ${sql.join(parts, sql`, `)}`);

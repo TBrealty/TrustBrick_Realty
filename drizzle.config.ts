@@ -16,7 +16,7 @@ export default defineConfig({
   out: "./db/migrations",
   // Migrations connect as the schema owner, never as the app role.
   dbCredentials: { url },
-  schemaFilter: ["identity", "orgs", "geography", "real_estate", "marketplace", "platform", "crm", "trust", "stays", "finance"],
+  schemaFilter: ["identity", "orgs", "geography", "real_estate", "marketplace", "platform", "crm", "trust", "stays", "finance", "rent"],
   strict: true,
   verbose: true,
 });

@@ -81,6 +81,12 @@ export const PERMISSIONS = {
   "payments.view": { domain: "payments", description: "See guests' online payments, refunds and hosts' payouts", platform: true },
   "payments.manage": { domain: "payments", description: "Refund guests, and hold, release and retry hosts' payouts", platform: true },
 
+  "landlords.invite": { domain: "rent", description: "Add landlords to rented properties", platform: false },
+  "tenancies.manage": { domain: "rent", description: "Set up, correct and end tenancies on rented properties", platform: false },
+  "rent.receive": { domain: "rent", description: "Receive rent for your own properties: proof of ownership, bank account, tenancies", platform: false },
+  "rent.view": { domain: "rent", description: "See landlords, tenancies, rent payments and settlements", platform: true },
+  "rent.manage": { domain: "rent", description: "Approve proof of ownership, verify bank accounts, settle rent to landlords and refund tenants", platform: true },
+
   "subscriptions.view": { domain: "subscriptions", description: "See subscriptions, plans and subscription revenue", platform: true },
   "subscriptions.manage": { domain: "subscriptions", description: "Record subscription payments, extend trials, change, grant and cancel subscriptions", platform: true },
 
@@ -121,7 +127,10 @@ export const SUPERADMIN_GRANTS: readonly Permission[] = [
 
 /** What a SuperAdmin may grant an admin, always at platform scope. */
 export const ADMIN_GRANTABLE: readonly Permission[] = ALL_PERMISSIONS.filter(
-  (p) => !SUPERADMIN_ONLY.includes(p) && !ORG_ONLY.includes(p) && !["listings.create", "listings.edit", "listings.submit", "contacts.view"].includes(p),
+  (p) =>
+    !SUPERADMIN_ONLY.includes(p) &&
+    !ORG_ONLY.includes(p) &&
+    !["listings.create", "listings.edit", "listings.submit", "contacts.view", "landlords.invite", "tenancies.manage", "rent.receive"].includes(p),
 );
 
 export const ADMIN_PRESETS = {
@@ -173,6 +182,7 @@ export const ADMIN_PRESETS = {
       "commission.view",
       "subscriptions.view",
       "payments.view",
+      "rent.view",
     ],
   },
 } as const satisfies Record<string, { label: string; description: string; permissions: readonly Permission[] }>;
@@ -208,6 +218,8 @@ const professional = (scope: Scope, extra: Partial<Record<Permission, Scope>> = 
   "bookings.view": scope,
   "bookings.manage": scope,
   "commission.view": scope,
+  "landlords.invite": scope,
+  "tenancies.manage": scope,
   ...extra,
 });
 
@@ -265,9 +277,9 @@ export const ROLES = {
   },
   landlord: {
     name: "Landlord",
-    description: "Lists their own properties for rent.",
+    description: "Owns properties an agent rents out: proves ownership, gives a bank account, confirms tenancies and receives the rent.",
     workspace: "professional",
-    grants: professional("own", { "analytics.view": "own" }),
+    grants: { "dashboard.view": "own", "rent.receive": "own" },
   },
   vendor: {
     name: "Vendor",

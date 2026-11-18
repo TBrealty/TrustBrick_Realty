@@ -10,10 +10,11 @@ import * as marketplace from "./schema/marketplace";
 import * as orgs from "./schema/orgs";
 import * as platform from "./schema/platform";
 import * as realEstate from "./schema/real-estate";
+import * as rentSchema from "./schema/rent";
 import * as staysSchema from "./schema/stays";
 import * as trust from "./schema/trust";
 
-export const schema = { ...identity, ...orgs, ...geography, ...realEstate, ...marketplace, ...platform, ...crm, ...trust, ...staysSchema, ...finance };
+export const schema = { ...identity, ...orgs, ...geography, ...realEstate, ...marketplace, ...platform, ...crm, ...trust, ...staysSchema, ...finance, ...rentSchema };
 
 // Reuse one pool across hot reloads in development instead of leaking a new one per edit.
 const globalForDb = globalThis as unknown as { trustbrickPool?: Pool };

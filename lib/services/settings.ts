@@ -26,6 +26,12 @@ export const SETTINGS = {
       "Guests pay when they book, through the payment provider, and hosts are paid a day after check-in. Stays whose host has no verified payout account can't be booked while this is on. When off, guests pay the host at the property.",
     default: false,
   },
+  "payments.rent_online": {
+    label: "Collect rent online",
+    description:
+      "Tenants of active tenancies are reminded each month and pay their rent online; Trustbrick settles it to the landlord's bank account from the back office. When off, landlords and tenancies can still be set up, but no rent falls due online.",
+    default: false,
+  },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;
 
@@ -46,7 +52,7 @@ export async function setSetting(actor: Actor, key: string, value: boolean, ctx:
   assertCan(actor, "settings.manage", "platform");
   if (!(key in SETTINGS)) throw invalid("Unknown setting.");
   const settingKey = key as SettingKey;
-  if (settingKey === "payments.stays_online" && value) {
+  if ((settingKey === "payments.stays_online" || settingKey === "payments.rent_online") && value) {
     const why = paymentsUnavailableReason();
     if (why) throw invalid(why);
   }

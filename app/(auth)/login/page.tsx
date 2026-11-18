@@ -44,6 +44,13 @@ export default async function LoginPage({ searchParams }: Props) {
           </FormAlert>
         </div>
       )}
+      {(params.invited === "landlord" || params.invited === "tenant") && (
+        <div className="mb-6">
+          <FormAlert tone="success">
+            Your account is ready{params.invited === "landlord" ? " and the property is in My properties" : " and your tenancy is accepted"}. Log in with the password you just chose.
+          </FormAlert>
+        </div>
+      )}
       {params.verify === "expired" && (
         <div className="mb-6">
           <FormAlert tone="info">That confirmation link has expired or was already used. Log in and we will send you a fresh one.</FormAlert>

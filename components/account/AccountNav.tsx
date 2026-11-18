@@ -16,6 +16,14 @@ const items = [
   { href: "/account/subscription", label: "Subscription", Icon: SparkIcon },
 ];
 
+function RentIcon({ className = "size-[18px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9.5 10 3.5l7 6M5 8.2V16.5h10V8.2M8 10.5h4M8 12.5h4M10.5 10.5c1.4 0 1.4 2 0 2L9 15" />
+    </svg>
+  );
+}
+
 function SparkIcon({ className = "size-[18px]" }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" aria-hidden className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -24,7 +32,7 @@ function SparkIcon({ className = "size-[18px]" }: { className?: string }) {
   );
 }
 
-export function AccountNav({ unreadMessages: initialUnread = 0 }: { unreadMessages?: number }) {
+export function AccountNav({ unreadMessages: initialUnread = 0, rent = false }: { unreadMessages?: number; rent?: boolean }) {
   const pathname = usePathname();
   const [unreadMessages, setUnread] = useState(initialUnread);
   const list = useRef<HTMLUListElement>(null);
@@ -64,7 +72,7 @@ export function AccountNav({ unreadMessages: initialUnread = 0 }: { unreadMessag
       <p className="eyebrow mb-5 hidden text-stone-deep lg:block">Your account</p>
       {/* A row of tabs on small screens, a vertical list alongside the content on desktop. */}
       <ul ref={list} className="-mx-(--gutter) flex gap-1 overflow-x-auto border-b border-line-light px-(--gutter) [scrollbar-width:none] lg:mx-0 lg:flex-col lg:gap-0 lg:border-b-0 lg:px-0 lg:sticky lg:top-28">
-        {items.map(({ href, label, Icon }) => {
+        {(rent ? [...items.slice(0, 3), { href: "/account/rent", label: "Rent", Icon: RentIcon }, ...items.slice(3)] : items).map(({ href, label, Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <li key={href}>

@@ -133,3 +133,42 @@ export const SUBSCRIPTION_STATUSES = ["trialing", "pending_payment", "active", "
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 /** Statuses that hold the subscriber's one live subscription. */
 export const LIVE_SUBSCRIPTION_STATUSES = ["trialing", "pending_payment", "active", "paused"] as const;
+
+// ── Rent collected online (lib/services/rent) ─────────────────────────────────
+/**
+ * Trustbrick collects the rent as a payment aggregator and settles it to the landlord's bank
+ * account from its back office. A landlord is linked to a property by an agent's invitation, proves
+ * ownership, and gives a bank account; a tenancy is set up by the agent, accepted by the tenant and
+ * confirmed by the landlord; each month's rent is a charge, paid online, then settled.
+ */
+/** new: a sign-up link for someone not yet a landlord. existing: a request a landlord accepts in their dashboard. */
+export const LANDLORD_INVITATION_KINDS = ["new", "existing"] as const;
+export type LandlordInvitationKind = (typeof LANDLORD_INVITATION_KINDS)[number];
+export const LANDLORD_INVITATION_STATUSES = ["pending", "accepted", "declined", "revoked", "expired"] as const;
+export type LandlordInvitationStatus = (typeof LANDLORD_INVITATION_STATUSES)[number];
+/** A landlord's link to a property: proof of ownership awaited, under review, approved or rejected; ended when they're no longer its landlord. */
+export const PROPERTY_LANDLORD_STATUSES = ["awaiting_proof", "under_review", "approved", "rejected", "ended"] as const;
+export type PropertyLandlordStatus = (typeof PROPERTY_LANDLORD_STATUSES)[number];
+export const OWNERSHIP_PROOF_KINDS = ["sale_deed", "property_tax_receipt", "allotment_letter", "electricity_bill", "other"] as const;
+export type OwnershipProofKind = (typeof OWNERSHIP_PROOF_KINDS)[number];
+export const BANK_ACCOUNT_METHODS = ["bank", "upi"] as const;
+export const BANK_ACCOUNT_STATUSES = ["pending", "verified", "failed"] as const;
+export type BankAccountStatus = (typeof BANK_ACCOUNT_STATUSES)[number];
+/**
+ * pending: waiting for the tenant to accept and the landlord to confirm. disputed: the landlord
+ * disagrees with the terms; the agent corrects them. active: rent falls due each month. ended and
+ * cancelled (never started) stop it.
+ */
+export const TENANCY_STATUSES = ["pending", "disputed", "active", "ended", "cancelled"] as const;
+export type TenancyStatus = (typeof TENANCY_STATUSES)[number];
+export const RENT_CHARGE_STATUSES = ["due", "paid", "cancelled"] as const;
+export type RentChargeStatus = (typeof RENT_CHARGE_STATUSES)[number];
+export const RENT_PAYMENT_STATUSES = ["created", "paid", "failed", "refunded"] as const;
+export type RentPaymentStatus = (typeof RENT_PAYMENT_STATUSES)[number];
+export const RENT_REFUND_STATUSES = ["pending", "processed", "failed"] as const;
+/**
+ * on_hold: waiting on the landlord (proof, bank account) or a person. ready: to be paid by the back
+ * office. failed: the bank returned it; ready again once retried. cancelled: the rent was refunded.
+ */
+export const SETTLEMENT_STATUSES = ["on_hold", "ready", "paid", "failed", "cancelled"] as const;
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];

@@ -24,6 +24,7 @@ import { type RequestContext, NO_REQUEST, audit } from "../audit";
 import { canAcceptTerms, getGstPercent, ratesFor } from "../commission";
 import { notify, notifyPermissionHolders } from "../notifications";
 import { type Page, pageParams } from "../pagination";
+import { applyRentEvent, isRentOrder, isRentRefund } from "../rent/payments";
 import { announceBooking, bookingSchema, emailNewBooking, expireStaleRequests, isOverlap, paymentsOnline, placeBooking, writeEvent } from "./bookings";
 import { type BookingPayment, bookingPayment, recordRefund, schedulePayout } from "./payment-ledger";
 
@@ -493,8 +494,9 @@ export async function receiveWebhook(provider: string, rawBody: string, headers:
   }
 }
 
-/** Applies one fact from the provider. Safe to apply twice. */
+/** Applies one fact from the provider. Safe to apply twice. Rent payments (RPY-, RRF-) have their own handling. */
 export async function applyProviderEvent(event: ProviderEvent) {
+  if (isRentOrder(event.orderId) || isRentRefund(event.refundId)) return applyRentEvent(event);
   switch (event.kind) {
     case "payment_succeeded":
     case "payment_authorized":

@@ -39,7 +39,12 @@ export const fakeDriver: PaymentDriver = {
 
   async getOrder(providerOrderId) {
     // The fake provider's record of an order is our own: it only ever changes through its events.
-    const { rows } = await db.execute(sql`SELECT status, amount, provider_payment_id, method, failure_reason FROM finance.payments WHERE provider_order_id = ${providerOrderId}`);
+    // Stay payments and rent payments both have orders here.
+    const { rows } = await db.execute(sql`
+      SELECT status, amount, provider_payment_id, method, failure_reason FROM finance.payments WHERE provider_order_id = ${providerOrderId}
+      UNION ALL
+      SELECT CASE status WHEN 'paid' THEN 'captured' WHEN 'refunded' THEN 'refunded' ELSE status END, amount, provider_payment_id, method, failure_reason
+        FROM rent.payments WHERE provider_order_id = ${providerOrderId}`);
     const r = rows[0] as Record<string, unknown> | undefined;
     if (!r) throw new ProviderError(`order ${providerOrderId} not found`, "That payment wasn't found.", false);
     const map: Record<string, OrderState> = { created: "open", authorized: "authorized", captured: "paid", partially_refunded: "paid", refunded: "paid", failed: "failed", voided: "voided" };
@@ -75,6 +80,14 @@ export const fakeDriver: PaymentDriver = {
     const { rows } = await db.execute(sql`SELECT status, status_reason FROM finance.payout_accounts WHERE provider_vendor_id = ${vendorId}`);
     const r = rows[0] as Record<string, unknown> | undefined;
     return { status: (r?.status as "active") ?? "pending", reason: (r?.status_reason as string) ?? null };
+  },
+
+  async verifyBankAccount(input) {
+    // Accounts ending 0000 and UPI IDs starting "fail" don't exist; the rest belong to whoever is named.
+    if ("accountNumber" in input ? FAILING_ACCOUNT.test(input.accountNumber) : /^fail/i.test(input.vpa)) {
+      return { valid: false, nameAtBank: null, reason: "The bank couldn't find this account. Check the details and try again." };
+    }
+    return { valid: true, nameAtBank: input.holder.trim().toUpperCase(), reason: null };
   },
 
   verifyWebhook(rawBody, headers) {

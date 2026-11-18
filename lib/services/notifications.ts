@@ -43,6 +43,11 @@ export const NOTIFICATION_TYPES = {
   payments_attention: "An online payment, refund or payout needs a look",
   stay_message: "A guest sends you a message about a stay",
   host_message: "A host replies to your message about a stay",
+  rent_landlord: "You're asked to be a property's landlord, or your proof of ownership or bank account is checked",
+  rent_tenancy: "A tenancy is set up, accepted, confirmed, disputed or ended",
+  rent_due: "Rent is due soon, due today or overdue",
+  rent_paid: "Rent is paid, or settled to your bank account",
+  rent_review: "A landlord's proof of ownership or bank account needs a check, or rent is waiting to be settled",
   admin_access_changed: "Your administrator access changes",
   security: "Security events on the platform",
 } as const;

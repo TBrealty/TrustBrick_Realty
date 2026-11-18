@@ -1,6 +1,7 @@
 import { apiRoute } from "@/lib/api/http";
 import { WORKSPACE_HEADER } from "@/lib/authz/session";
 import { unreadCount } from "@/lib/services/notifications";
+import { hasTenancies } from "@/lib/services/rent/tenancies";
 import { guestUnreadCount } from "@/lib/services/stays/messages";
 import { overviewFor } from "@/lib/services/subscriptions";
 
@@ -11,11 +12,12 @@ import { overviewFor } from "@/lib/services/subscriptions";
  */
 export const GET = apiRoute("v1.me", { auth: "user" }, async ({ request, person, workspaces }) => {
   const p = person!;
-  const [list, overview, unread, unreadMessages] = await Promise.all([
+  const [list, overview, unread, unreadMessages, tenant] = await Promise.all([
     workspaces(),
     overviewFor({ kind: "user", userId: p.userId }),
     unreadCount(p.userId),
     guestUnreadCount(p.userId),
+    hasTenancies(p.userId),
   ]);
   const hint = request.headers.get(WORKSPACE_HEADER);
   const active = list.find((w) => w.membershipId === hint) ?? (list.length === 1 ? list[0] : null);
@@ -38,5 +40,7 @@ export const GET = apiRoute("v1.me", { auth: "user" }, async ({ request, person,
     },
     unreadNotifications: unread,
     unreadMessages,
+    /** They rent a home through Trustbrick: show Rent. */
+    tenant,
   };
 });

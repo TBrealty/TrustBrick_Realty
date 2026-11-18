@@ -23,6 +23,10 @@ import { listingAgentChoices } from "@/lib/services/members";
 import { assignListingAgentAction } from "../actions";
 import { tourDataForProperty } from "@/lib/services/tours";
 import { isLiveForTours } from "@/lib/tours/terms";
+import { RentCard } from "@/components/rent/RentCard";
+import { isRentable } from "@/lib/services/rent/common";
+import { landlordPanel } from "@/lib/services/rent/landlords";
+import { currentTenancy } from "@/lib/services/rent/tenancies";
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<{ submitted?: string }> };
 
@@ -47,6 +51,11 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
   const reviews = listing.cases.filter((c) => c.caseType === "listing_review");
   const openCase = reviews.find((c) => c.status === "open" || c.status === "in_review");
   const canEdit = actor.workspace === "professional" && can(actor, "listings.edit") && isEditable(listing.status);
+  // Rented by the month: the agent adds the landlord and sets up the tenancy here.
+  const rentWork =
+    actor.workspace === "professional" && isRentable(listing.purpose) && listing.status !== "removed" && (can(actor, "landlords.invite") || can(actor, "tenancies.manage"));
+  const [rentPanel, tenancy] = rentWork ? await Promise.all([landlordPanel(listing.propertyId), currentTenancy(listing.propertyId)]) : [null, null];
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [deal, commission, tour, agents] = await Promise.all([
     ["published", "paused"].includes(listing.status) ? dealContextFor(listing) : null,
     listingCommission(actor, listing),
@@ -140,6 +149,12 @@ export default async function PropertyDetailPage({ params, searchParams }: Props
       {commission && (
         <div className="mt-5">
           <ListingCommissionCard data={commission} team={actor.workspace === "platform"} personal={actor.organization.orgType === "personal"} editPricingHref={canEdit ? `/properties/${ref}/edit?step=pricing` : undefined} />
+        </div>
+      )}
+
+      {rentPanel && (
+        <div className="mt-5">
+          <RentCard listingRef={listing.referenceId} panel={rentPanel} tenancy={tenancy} canInvite={can(actor, "landlords.invite")} canTenancy={can(actor, "tenancies.manage")} today={today} />
         </div>
       )}
 

@@ -31,6 +31,12 @@ export const REFERENCE_ENTITIES = {
   PAY: { label: "Payment", path: "/payments" },
   RFD: { label: "Refund", path: "/payments" },
   PYT: { label: "Payout", path: "/payments" },
+  LND: { label: "Landlord", path: "/rent-collection/landlords" },
+  LIN: { label: "Landlord invitation", path: null },
+  TEN: { label: "Tenancy", path: null },
+  RNT: { label: "Rent charge", path: null },
+  RPY: { label: "Rent payment", path: "/rent-collection?tab=payments" },
+  STL: { label: "Settlement", path: "/rent-collection?tab=settle" },
 } as const;
 
 export type ReferencePrefix = keyof typeof REFERENCE_ENTITIES;

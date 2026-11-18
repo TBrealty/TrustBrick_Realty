@@ -45,6 +45,8 @@ export type VendorInput = {
   upi?: { holder: string; vpa: string };
 };
 
+export type BankAccountCheck = { holder: string } & ({ accountNumber: string; ifsc: string } | { vpa: string });
+
 /** A webhook, reduced to what we act on. */
 export type ProviderEvent = {
   eventId: string;
@@ -95,6 +97,11 @@ export interface PaymentDriver {
   /** Registers (or updates) a host's payout account. The provider verifies the bank account and KYC. */
   createVendor(input: VendorInput): Promise<{ vendorId: string; status: PayoutAccountStatus; reason: string | null }>;
   getVendor(vendorId: string): Promise<{ status: PayoutAccountStatus; reason: string | null }>;
+  /**
+   * Checks a landlord's bank account or UPI ID is real and whose it is (a ₹1 test deposit, or the
+   * UPI directory), for rent settled from Trustbrick's back office. Nothing is kept by the provider.
+   */
+  verifyBankAccount(input: BankAccountCheck): Promise<{ valid: boolean; nameAtBank: string | null; reason: string | null }>;
   /** Checks a webhook's signature. */
   verifyWebhook(rawBody: string, headers: Headers): boolean;
   parseWebhook(rawBody: string): ProviderEvent;

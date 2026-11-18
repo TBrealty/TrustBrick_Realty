@@ -213,3 +213,6 @@ export function agentRejectedMessage(to: string, input: { name: string; reason: 
     html: layout(`About your application, ${escape(first)}`, lines.map(escape), { label: "Review and apply again", url: input.url }),
   };
 }
+
+/** A plain notice with an optional button (rent: invitations, reminders, receipts). Values are escaped here. */
+export const noticeMessage = bookingMessage;

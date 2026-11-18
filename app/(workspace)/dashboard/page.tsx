@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BarList, TrendChart } from "@/components/workspace/charts";
 import { CommissionSummary } from "@/components/workspace/CommissionSummary";
 import { PlatformCommission } from "@/components/workspace/PlatformCommission";
@@ -30,6 +31,8 @@ export default async function DashboardPage({ searchParams }: Props) {
   if (actor.workspace === "platform") return <PlatformView actor={actor} range={range} excludeSample={params.sample === "exclude"} />;
   // Hosts don't work leads or visits; their dashboard is about stays and bookings.
   if (!can(actor, "leads.view") && can(actor, "bookings.view")) return <HostView actor={actor} />;
+  // Landlords' dashboard is their properties and rent.
+  if (!can(actor, "leads.view") && !can(actor, "listings.view") && can(actor, "rent.receive")) redirect("/my-properties");
   return <ProfessionalView actor={actor} range={range} />;
 }
 

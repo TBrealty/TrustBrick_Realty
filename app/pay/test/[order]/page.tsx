@@ -21,10 +21,15 @@ export default async function TestPaymentPage({ params, searchParams }: Props) {
   const { session: sessionId } = await searchParams;
   if (paymentDriver()?.name !== "fake") notFound();
   const { user } = await requireSession(`/pay/test/${order}?session=${sessionId ?? ""}`);
+  // Stay payments and rent payments (RPY-) both come through here.
   const { rows } = await db.execute(sql`
     SELECT p.amount, p.status, p.capture, p.session_id, l.title, b.reference_id AS booking_ref
       FROM finance.payments p JOIN stays.bookings b ON b.id = p.booking_id JOIN marketplace.listings l ON l.id = b.listing_id
-     WHERE p.provider_order_id = ${order} AND p.guest_user_id = ${user.id}`);
+     WHERE p.provider_order_id = ${order} AND p.guest_user_id = ${user.id}
+    UNION ALL
+    SELECT p.amount, p.status, 'auto', p.session_id, coalesce(l.title, 'Rent'), c.reference_id
+      FROM rent.payments p JOIN rent.charges c ON c.id = p.charge_id JOIN rent.tenancies t ON t.id = p.tenancy_id LEFT JOIN marketplace.listings l ON l.id = t.listing_id
+     WHERE p.provider_order_id = ${order} AND p.tenant_user_id = ${user.id}`);
   const p = rows[0] as { amount: string; status: string; capture: string; session_id: string | null; title: string; booking_ref: string } | undefined;
   if (!p || (p.session_id && p.session_id !== sessionId)) notFound();
 

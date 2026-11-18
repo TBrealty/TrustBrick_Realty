@@ -6,6 +6,8 @@ import { listBookingsForActor } from "@/lib/services/stays/bookings";
 import { listHostConversations } from "@/lib/services/stays/messages";
 import { canViewMembers } from "@/lib/services/members";
 import { hosts } from "@/lib/workspace/nav";
+import { db } from "@/lib/db";
+import { sql } from "drizzle-orm";
 
 /**
  * The partner home screen: what needs doing today. Each part appears only when the person's
@@ -23,6 +25,15 @@ export const GET = apiRoute("v1.partner.summary", { auth: "user" }, async ({ act
     can(a, "listings.view") ? listingGroupCounts(a) : null,
     can(a, "bookings.manage") ? hosts(a) : false,
   ]);
+  // A landlord: requests to answer and tenancies to confirm.
+  const rent = can(a, "rent.receive")
+    ? ((
+        await db.execute(sql`
+          SELECT (SELECT count(*) FROM rent.landlord_invitations WHERE landlord_user_id = ${a.userId} AND kind = 'existing' AND status = 'pending' AND expires_at > now())::int AS requests,
+                 (SELECT count(*) FROM rent.tenancies WHERE landlord_user_id = ${a.userId} AND status = 'pending' AND landlord_confirmed_at IS NULL)::int AS to_confirm,
+                 (SELECT count(*) FROM rent.property_landlords WHERE landlord_user_id = ${a.userId} AND status <> 'ended')::int AS properties`)
+      ).rows[0] as { requests: number; to_confirm: number; properties: number })
+    : null;
   return {
     workspace: { name: a.organization.name, type: a.organization.orgType, roles: a.roles },
     leads: leadsNew && leadsOpen ? { new: leadsNew.total, open: leadsOpen.total, latest: leadsNew.rows.slice(0, 3) } : null,
@@ -30,6 +41,8 @@ export const GET = apiRoute("v1.partner.summary", { auth: "user" }, async ({ act
     bookings: bookings ? { counts: bookings.counts, requests: bookings.rows.slice(0, 3) } : null,
     inbox: inbox ? { unread: inbox.unread } : null,
     listings,
+    /** For a landlord: their properties, and what's waiting for them (requests, tenancies to confirm). */
+    rent: rent ? { properties: rent.properties, waiting: rent.requests + rent.to_confirm } : null,
     /** What the workspace's menus may offer this person, as the website's sidebar. */
     can: {
       onboard: can(a, "listings.create"),
@@ -41,6 +54,8 @@ export const GET = apiRoute("v1.partner.summary", { auth: "user" }, async ({ act
       subscription: professional,
       /** Agents get the hosting calendar once they have a homestay; hosts always. */
       calendar: hosting,
+      /** Add landlords and set up tenancies on rented properties. */
+      rent: can(a, "landlords.invite") || can(a, "tenancies.manage"),
     },
   };
 });
