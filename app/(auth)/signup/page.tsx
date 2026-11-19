@@ -32,7 +32,7 @@ function Switch({ agent }: { agent: boolean }) {
 
 export default async function SignUpPage({ searchParams }: Props) {
   const agent = (await searchParams).as === "agent";
-  if (await getSession()) redirect(agent ? "/become-an-agent" : "/account/profile");
+  if (await getSession()) redirect(agent ? "/become-an-agent" : "/");
 
   if (agent) {
     const [cities, open] = await Promise.all([cityOptions(), getSetting("agents.applications_open")]);

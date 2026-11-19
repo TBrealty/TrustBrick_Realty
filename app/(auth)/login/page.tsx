@@ -5,6 +5,7 @@ import { AuthHeading } from "@/components/auth/AuthHeading";
 import { FormAlert } from "@/components/auth/fields";
 import { SignInForm } from "@/components/auth/forms";
 import { getSession, safeRedirectPath } from "@/lib/auth/session";
+import { loadWorkspaces } from "@/lib/authz/actor";
 
 export const metadata: Metadata = { title: "Log in — Trustbrick" };
 
@@ -14,7 +15,9 @@ export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams;
   // Only an explicit, same-site destination is carried through; otherwise the login action decides.
   const next = safeRedirectPath(params.next, "");
-  if (await getSession()) redirect(next || "/dashboard");
+  // Already signed in: where they were headed, else their workspace, or the home page for a customer.
+  const session = await getSession();
+  if (session) redirect(next || ((await loadWorkspaces(session.user.id)).length > 0 ? "/dashboard" : "/"));
 
   return (
     <>

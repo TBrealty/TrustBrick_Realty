@@ -8,7 +8,7 @@ import { clientIp, limit, RULES, type RateLimitResult } from "@/lib/auth/rate-li
 import { safeRedirectPath } from "@/lib/auth/session";
 import { loadWorkspaces } from "@/lib/authz/actor";
 import { env } from "@/lib/env";
-import { type AgentFormState, type Field, type FormState, PENDING_EMAIL_COOKIE } from "@/lib/auth/form";
+import { type AgentFormState, CODE_LENGTH, CODE_MINUTES, type Field, type FormState, PENDING_EMAIL_COOKIE, RESET_EMAIL_COOKIE } from "@/lib/auth/form";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -49,9 +49,14 @@ const signInSchema = z.object({
   password: z.string().min(1, { error: "Enter your password." }),
 });
 
+const codeField = z.preprocess(
+  (v) => (typeof v === "string" ? v.replace(/\D/g, "") : v),
+  z.string().length(CODE_LENGTH, { error: `Enter the ${CODE_LENGTH}-digit code from the email.` }),
+);
+
 const resetSchema = z
   .object({
-    token: z.string().min(1),
+    code: codeField,
     password: newPasswordField,
     confirmPassword: z.string(),
   })
@@ -59,6 +64,21 @@ const resetSchema = z
     path: ["confirmPassword"],
     error: "The passwords do not match.",
   });
+
+const PASSWORDS_DIFFER = "The passwords don't match. Type the same password twice.";
+
+/** The short-lived httpOnly cookie that carries an address between the steps of a flow. */
+async function rememberEmail(name: string, email: string) {
+  (await cookies()).set(name, email, { httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 30 * 60 });
+}
+
+/** What a wrong, expired or used-up code says. */
+function codeProblem(code: string | undefined): string | null {
+  if (code === "INVALID_OTP") return "That code isn't right. Check the email and try again.";
+  if (code === "OTP_EXPIRED") return "That code has expired. Send yourself a new one.";
+  if (code === "TOO_MANY_ATTEMPTS") return "Too many wrong tries for that code. Send yourself a new one.";
+  return null;
+}
 
 function fieldErrors(error: z.ZodError): FormState["fieldErrors"] {
   const out: FormState["fieldErrors"] = {};
@@ -99,7 +119,10 @@ const somethingWentWrong: FormState = {
 export async function signUpAction(_prev: FormState, form: FormData): Promise<FormState> {
   const values = { name: text(form, "name"), email: text(form, "email"), intent: text(form, "intent") };
   const parsed = signUpSchema.safeParse({ ...values, password: text(form, "password") });
-  if (!parsed.success) return { status: "error", fieldErrors: fieldErrors(parsed.error), values };
+  const confirmError = text(form, "confirmPassword") !== text(form, "password") ? PASSWORDS_DIFFER : undefined;
+  if (!parsed.success || confirmError) {
+    return { status: "error", fieldErrors: { ...(parsed.success ? {} : fieldErrors(parsed.error)), ...(confirmError ? { confirmPassword: confirmError } : {}) }, values };
+  }
 
   const ip = await clientIp();
   const limited = await limit([{ key: `sign-up:ip:${ip}`, rule: RULES.signUpByIp }]);
@@ -110,7 +133,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
     // If the email is already registered, Better Auth returns a synthetic success and
     // emails the real owner instead, so this path looks identical either way.
     await auth.api.signUpEmail({
-      body: { name, email, password, intent, callbackURL: "/welcome" },
+      body: { name, email, password, intent },
       headers: await headers(),
     });
   } catch (error) {
@@ -123,13 +146,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
     return { ...somethingWentWrong, values };
   }
 
-  (await cookies()).set(PENDING_EMAIL_COOKIE, email, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 30 * 60,
-  });
+  await rememberEmail(PENDING_EMAIL_COOKIE, email);
   redirect("/check-email");
 }
 
@@ -150,6 +167,7 @@ export async function agentSignUpAction(_prev: AgentFormState, form: FormData): 
   const account = signUpSchema.pick({ name: true, email: true, password: true }).safeParse({ name: values.name, email: values.email, password: text(form, "password") });
   const application = Object.fromEntries(Object.entries(values).filter(([key]) => key !== "name" && key !== "email"));
   let errors: Record<string, string> = account.success ? {} : { ...fieldErrors(account.error) };
+  if (text(form, "confirmPassword") !== text(form, "password")) errors.confirmPassword = PASSWORDS_DIFFER;
   try {
     parseAgentApplication(application);
   } catch (error) {
@@ -168,7 +186,7 @@ export async function agentSignUpAction(_prev: AgentFormState, form: FormData): 
   const { name, email, password } = account.data;
   const existing = await db.execute(sql`SELECT 1 FROM identity.users WHERE email = ${email}`);
   try {
-    await auth.api.signUpEmail({ body: { name, email, password, callbackURL: "/become-an-agent?applied=1" }, headers: await headers() });
+    await auth.api.signUpEmail({ body: { name, email, password }, headers: await headers() });
   } catch (error) {
     const code = errorCode(error);
     if (code === "PASSWORD_TOO_SHORT" || code === "PASSWORD_TOO_LONG") {
@@ -184,13 +202,7 @@ export async function agentSignUpAction(_prev: AgentFormState, form: FormData): 
     if (id) await holdAgentSignup(id, application);
   }
 
-  (await cookies()).set(PENDING_EMAIL_COOKIE, email, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 30 * 60,
-  });
+  await rememberEmail(PENDING_EMAIL_COOKIE, email);
   redirect("/check-email?as=agent");
 }
 
@@ -211,11 +223,10 @@ export async function signInAction(_prev: FormState, form: FormData): Promise<Fo
   if (limited.limited) return tooManyAttempts(limited, values);
 
   let userId: string | null = null;
+  let unconfirmed = false;
   try {
     const signedIn = await auth.api.signInEmail({
-      // callbackURL matters when the account is unverified: the fresh confirmation link
-      // sent on this attempt returns here, not to the home page.
-      body: { email, password, rememberMe: form.get("remember") === "on", callbackURL: "/welcome" },
+      body: { email, password, rememberMe: form.get("remember") === "on" },
       headers: await headers(),
     });
     userId = signedIn.user.id;
@@ -224,112 +235,176 @@ export async function signInAction(_prev: FormState, form: FormData): Promise<Fo
     if (code === "INVALID_EMAIL_OR_PASSWORD") {
       return { status: "error", message: "That email and password do not match. Check them and try again.", values };
     }
-    if (code === "EMAIL_NOT_VERIFIED") {
-      // Only reachable with the correct password, so this reveals nothing to a guesser.
-      return {
-        status: "error",
-        message: "Please confirm your email first. We have just sent you a fresh confirmation link.",
-        values,
-      };
-    }
-    if (code === "ACCOUNT_SUSPENDED") {
+    // Only reachable with the correct password, so it reveals nothing to a guesser. A fresh code is
+    // on its way: the code page signs them in.
+    if (code === "EMAIL_NOT_VERIFIED") unconfirmed = true;
+    else if (code === "ACCOUNT_SUSPENDED") {
       return { status: "error", message: "This account is suspended. If you think this is a mistake, contact Trustbrick support.", values };
+    } else if (code === "TOO_MANY_REQUESTS") return { status: "error", message: "Too many attempts. Please wait and try again.", values };
+    else {
+      console.error("[auth] sign-in failed", error);
+      return { ...somethingWentWrong, values };
     }
-    if (code === "TOO_MANY_REQUESTS") return { status: "error", message: "Too many attempts. Please wait and try again.", values };
-    console.error("[auth] sign-in failed", error);
-    return { ...somethingWentWrong, values };
   }
+  if (unconfirmed) {
+    await rememberEmail(PENDING_EMAIL_COOKIE, email);
+    const next = safeRedirectPath(form.get("next"), "");
+    redirect(`/check-email?resent=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
+  }
+  redirect(await afterSignIn(userId, form.get("next")));
+}
 
-  // Without an explicit destination: agents and staff land in their workspace, customers on their profile.
-  const fallback = userId && (await loadWorkspaces(userId)).length > 0 ? "/dashboard" : "/account/profile";
+/**
+ * Where someone goes once signed in: where they were headed (the page that asked them to log in),
+ * else agents, hosts, landlords and staff to their workspace, and customers to the home page.
+ */
+async function afterSignIn(userId: string | null, next: FormDataEntryValue | null): Promise<string> {
+  const fallback = userId && (await loadWorkspaces(userId)).length > 0 ? "/dashboard" : "/";
   // Ask the next page to show the plans pop-up once. It decides what (if anything) to show.
   (await cookies()).set(PLANS_PROMO_COOKIE, "1", { path: "/", maxAge: 60 * 10, sameSite: "lax", secure: env.NODE_ENV === "production" });
-  redirect(safeRedirectPath(form.get("next"), fallback));
+  return safeRedirectPath(next, fallback);
+}
+
+// ── Confirm the email with its code ─────────────────────────────────────────
+
+/**
+ * The code from the sign-up email, typed on the same page: the email is confirmed and they're
+ * signed in, in this tab. The address comes from the short-lived cookie, never the form.
+ */
+export async function verifyEmailCodeAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const email = (await cookies()).get(PENDING_EMAIL_COOKIE)?.value;
+  if (!email) return { status: "error", message: "This step has timed out. Log in with your email and password to get a new code." };
+  const parsed = z.object({ code: codeField }).safeParse({ code: text(form, "code") });
+  if (!parsed.success) return { status: "error", fieldErrors: fieldErrors(parsed.error) };
+
+  const ip = await clientIp();
+  const limited = await limit([{ key: `code-check:ip:${ip}`, rule: RULES.codeCheckByIp }]);
+  if (limited.limited) return tooManyAttempts(limited);
+
+  let userId: string | null = null;
+  try {
+    const result = await auth.api.verifyEmailOTP({ body: { email, otp: parsed.data.code }, headers: await headers() });
+    userId = result.user.id;
+  } catch (error) {
+    const code = errorCode(error);
+    const problem = codeProblem(code);
+    if (problem) return { status: "error", fieldErrors: { code: problem } };
+    if (code === "USER_NOT_FOUND") return { status: "error", fieldErrors: { code: "That code isn't right. Check the email and try again." } };
+    console.error("[auth] code check failed", error);
+    return somethingWentWrong;
+  }
+  (await cookies()).delete(PENDING_EMAIL_COOKIE);
+  // A new agent's application went to the team as the email was confirmed (lib/auth/auth.ts).
+  if (text(form, "as") === "agent") redirect("/become-an-agent?applied=1");
+  redirect(await afterSignIn(userId, form.get("next")));
+}
+
+// ── Resend the code ───────────────────────────────────────────────────────────
+
+export async function resendVerificationAction(): Promise<FormState> {
+  const email = (await cookies()).get(PENDING_EMAIL_COOKIE)?.value;
+  if (!email) return { status: "error", message: "This step has timed out. Log in with your email and password to get a new code." };
+
+  const ip = await clientIp();
+  const limited = await limit([
+    { key: `code-send:email:${email.toLowerCase()}:minute`, rule: RULES.codeResendByEmail },
+    { key: `code-send:email:${email.toLowerCase()}`, rule: RULES.codeSendByEmail },
+    { key: `resend:ip:${ip}`, rule: RULES.resetRequestByIp },
+  ]);
+  if (limited.limited) {
+    return { status: "error", message: limited.retryAfterSeconds <= 60 ? "A new code was just sent. Wait a minute before asking for another." : tooManyAttempts(limited).message };
+  }
+
+  // Only for an account that still needs confirming: a confirmed one logs in with its password.
+  const pending = await db.execute(sql`SELECT 1 FROM identity.users WHERE email = ${email.toLowerCase()} AND NOT email_verified`);
+  if (pending.rows[0]) {
+    try {
+      await auth.api.sendVerificationOTP({ body: { email, type: "email-verification" }, headers: await headers() });
+    } catch (error) {
+      console.error("[auth] resend code failed", error);
+    }
+  }
+  return { status: "success", message: `If that address still needs confirming, a new code is on its way. It expires in ${CODE_MINUTES} minutes.` };
 }
 
 // ── Forgot password ───────────────────────────────────────────────────────────
 
+/**
+ * Sends a password reset code (if there is an account) and goes on to the page where it's typed,
+ * with a new password. The response is the same either way, so it reveals nothing.
+ */
 export async function requestPasswordResetAction(_prev: FormState, form: FormData): Promise<FormState> {
   const values = { email: text(form, "email") };
   const parsed = z.object({ email: emailField }).safeParse(values);
   if (!parsed.success) return { status: "error", fieldErrors: fieldErrors(parsed.error), values };
 
-  const { email } = parsed.data;
+  const email = parsed.data.email.toLowerCase();
   const ip = await clientIp();
   const limited = await limit([
     { key: `reset-request:ip:${ip}`, rule: RULES.resetRequestByIp },
-    { key: `reset-request:email:${email.toLowerCase()}`, rule: RULES.resetRequestByEmail },
+    { key: `reset-request:email:${email}`, rule: RULES.resetRequestByEmail },
   ]);
   if (limited.limited) return tooManyAttempts(limited, values);
 
   try {
-    await auth.api.requestPasswordReset({ body: { email, redirectTo: "/reset-password" }, headers: await headers() });
+    await auth.api.requestPasswordResetEmailOTP({ body: { email }, headers: await headers() });
   } catch (error) {
     // Never surface this: the response must look the same whether or not the account exists.
     console.error("[auth] password reset request failed", error);
   }
-
-  return {
-    status: "success",
-    message: "If an account exists for that email, we have sent a link to reset your password. It expires in 30 minutes.",
-    values,
-  };
+  await rememberEmail(RESET_EMAIL_COOKIE, email);
+  redirect("/reset-password");
 }
 
 // ── Reset password ────────────────────────────────────────────────────────────
 
+/** The code from the reset email and the new password, typed twice. Every session is logged out. */
 export async function resetPasswordAction(_prev: FormState, form: FormData): Promise<FormState> {
-  const parsed = resetSchema.safeParse({
-    token: text(form, "token"),
-    password: text(form, "password"),
-    confirmPassword: text(form, "confirmPassword"),
-  });
-  if (!parsed.success) {
-    const errors = fieldErrors(parsed.error);
-    if (!text(form, "token")) return { status: "error", message: "This reset link is incomplete. Please request a new one." };
-    return { status: "error", fieldErrors: errors };
-  }
+  const email = (await cookies()).get(RESET_EMAIL_COOKIE)?.value;
+  if (!email) return { status: "error", message: "This step has timed out. Ask for a new code." };
+  const parsed = resetSchema.safeParse({ code: text(form, "code"), password: text(form, "password"), confirmPassword: text(form, "confirmPassword") });
+  if (!parsed.success) return { status: "error", fieldErrors: fieldErrors(parsed.error) };
 
   const ip = await clientIp();
   const limited = await limit([{ key: `reset-submit:ip:${ip}`, rule: RULES.resetSubmitByIp }]);
   if (limited.limited) return tooManyAttempts(limited);
 
   try {
-    await auth.api.resetPassword({ body: { newPassword: parsed.data.password, token: parsed.data.token }, headers: await headers() });
+    await auth.api.resetPasswordEmailOTP({ body: { email, otp: parsed.data.code, password: parsed.data.password }, headers: await headers() });
   } catch (error) {
     const code = errorCode(error);
-    if (code === "INVALID_TOKEN") {
-      return { status: "error", message: "This reset link has expired or has already been used. Please request a new one." };
-    }
+    const problem = codeProblem(code);
+    if (problem) return { status: "error", fieldErrors: { code: problem } };
+    if (code === "USER_NOT_FOUND") return { status: "error", fieldErrors: { code: "That code isn't right. Check the email and try again." } };
     if (code === "PASSWORD_TOO_SHORT" || code === "PASSWORD_TOO_LONG") {
       return { status: "error", fieldErrors: { password: `Use between ${PASSWORD_MIN} and ${PASSWORD_MAX} characters.` } };
     }
     console.error("[auth] password reset failed", error);
     return somethingWentWrong;
   }
-
+  (await cookies()).delete(RESET_EMAIL_COOKIE);
   redirect("/login?reset=1");
 }
 
-// ── Resend verification ───────────────────────────────────────────────────────
-
-export async function resendVerificationAction(): Promise<FormState> {
-  const email = (await cookies()).get(PENDING_EMAIL_COOKIE)?.value;
-  if (!email) return { status: "error", message: "Your session for this step has expired. Log in to get a new link." };
-
+/** Another reset code, for the address in the cookie (at most once a minute). */
+export async function resendResetCodeAction(): Promise<FormState> {
+  const email = (await cookies()).get(RESET_EMAIL_COOKIE)?.value;
+  if (!email) return { status: "error", message: "This step has timed out. Ask for a new code." };
   const ip = await clientIp();
   const limited = await limit([
-    { key: `resend:ip:${ip}`, rule: RULES.resetRequestByIp },
-    { key: `resend:email:${email.toLowerCase()}`, rule: RULES.resetRequestByEmail },
+    { key: `code-send:reset:${email}:minute`, rule: RULES.codeResendByEmail },
+    { key: `reset-request:email:${email}`, rule: RULES.resetRequestByEmail },
+    { key: `reset-request:ip:${ip}`, rule: RULES.resetRequestByIp },
   ]);
-  if (limited.limited) return tooManyAttempts(limited);
-
-  try {
-    await auth.api.sendVerificationEmail({ body: { email, callbackURL: "/welcome" }, headers: await headers() });
-  } catch (error) {
-    console.error("[auth] resend verification failed", error);
+  if (limited.limited) {
+    return { status: "error", message: limited.retryAfterSeconds <= 60 ? "A new code was just sent. Wait a minute before asking for another." : tooManyAttempts(limited).message };
   }
-  return { status: "success", message: "If that address still needs confirming, a new link is on its way." };
+  try {
+    await auth.api.requestPasswordResetEmailOTP({ body: { email }, headers: await headers() });
+  } catch (error) {
+    console.error("[auth] reset code resend failed", error);
+  }
+  return { status: "success", message: `If there's an account for that email, a new code is on its way. It expires in ${CODE_MINUTES} minutes.` };
 }
 
 // ── Log out ───────────────────────────────────────────────────────────────────

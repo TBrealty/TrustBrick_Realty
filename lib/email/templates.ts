@@ -21,32 +21,42 @@ function layout(heading: string, paragraphs: string[], action?: { label: string;
 const escape = (value: string) =>
   value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export function verifyEmailMessage(to: string, name: string, url: string): EmailMessage {
-  const first = escape(name.split(" ")[0] || "there");
+/** A one-time code, large and spaced so it's easy to read and type. Digits only, so nothing to escape. */
+const codeBlock = (code: string) =>
+  `<p style="margin:8px 0 24px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#0d1119">${code}</p>`;
+
+/** The code that confirms a new account's email. Typed on the same page, so no link opens a new tab. */
+export function verifyCodeMessage(to: string, code: string, minutes: number): EmailMessage {
   return {
     to,
-    subject: `Confirm your email for ${brand}`,
-    text: `Hi ${name},\n\nConfirm your email to finish creating your ${brand} account:\n${url}\n\nThis link expires in 24 hours. If you did not sign up, you can ignore this email.`,
-    html: layout(
-      `Confirm your email, ${first}`,
-      [`Confirm your email address to finish creating your ${brand} account.`, "This link expires in 24 hours. If you did not sign up, you can safely ignore this email."],
-      { label: "Confirm email", url },
+    subject: `${code} is your ${brand} code`,
+    text: `Your ${brand} code is ${code}
+
+Type it on the sign-up page to confirm your email. It expires in ${minutes} minutes.
+
+If you did not sign up, you can ignore this email. Never share this code: ${brand} will never ask you for it.`,
+    html: layout("Confirm your email", [
+      `Type this code on the ${brand} page to confirm your email and finish creating your account.`,
+    ]).replace(
+      "</h1>",
+      `</h1>${codeBlock(code)}<p style="margin:0 0 16px;line-height:1.6;color:#3b404b">It expires in ${minutes} minutes. If you did not sign up, you can ignore this email. Never share this code: ${brand} will never ask you for it.</p>`,
     ),
   };
 }
 
-export function resetPasswordMessage(to: string, url: string): EmailMessage {
+/** The code that lets someone choose a new password. */
+export function resetCodeMessage(to: string, code: string, minutes: number): EmailMessage {
   return {
     to,
-    subject: `Reset your ${brand} password`,
-    text: `Someone asked to reset the password for your ${brand} account.\n\nReset it here:\n${url}\n\nThis link expires in 30 minutes and works once. If this was not you, ignore this email — your password has not changed.`,
-    html: layout(
-      "Reset your password",
-      [
-        `Someone asked to reset the password for your ${brand} account.`,
-        "This link expires in 30 minutes and can be used once. If this was not you, ignore this email — your password has not changed.",
-      ],
-      { label: "Choose a new password", url },
+    subject: `${code} is your ${brand} password reset code`,
+    text: `Someone asked to reset the password for your ${brand} account.
+
+Your code is ${code}. It expires in ${minutes} minutes.
+
+If this was not you, ignore this email: your password has not changed. Never share this code.`,
+    html: layout("Reset your password", [`Someone asked to reset the password for your ${brand} account. Type this code on the reset page to choose a new password.`]).replace(
+      "</h1>",
+      `</h1>${codeBlock(code)}<p style="margin:0 0 16px;line-height:1.6;color:#3b404b">It expires in ${minutes} minutes. If this was not you, ignore this email: your password has not changed. Never share this code.</p>`,
     ),
   };
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { type AgentFormState, initialAgentFormState, PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/form";
+import { type AgentFormState, initialAgentFormState, PASSWORD_MIN } from "@/lib/auth/form";
 import { APPLICANT_ORG_TYPE_LABELS, APPLICANT_ORG_TYPES } from "@/lib/organizations/terms";
-import { ChoiceCards, FormAlert, PasswordField, SelectField, SubmitButton, TextAreaField, TextField } from "./fields";
+import { ChoiceCards, FormAlert, NewPasswordPair, SelectField, SubmitButton, TextAreaField, TextField } from "./fields";
 
 type Joining = "independent" | "organization";
 type OrgRoute = "new_organization" | "join_organization";
@@ -51,15 +51,7 @@ export function AgentForm({
         <Section title="Your account" description="You'll sign in with this email and password.">
           <TextField label="Full name" name="name" autoComplete="name" defaultValue={v.name} error={e.name} autoFocus />
           <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={v.email} error={e.email} />
-          <PasswordField
-            label="Password"
-            name="password"
-            autoComplete="new-password"
-            minLength={PASSWORD_MIN}
-            maxLength={PASSWORD_MAX}
-            error={e.password}
-            hint={`At least ${PASSWORD_MIN} characters.`}
-          />
+          <NewPasswordPair errors={{ password: e.password, confirmPassword: e.confirmPassword }} hint={`At least ${PASSWORD_MIN} characters.`} />
         </Section>
       )}
 

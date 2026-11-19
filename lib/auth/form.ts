@@ -1,5 +1,5 @@
 /** Shared between server actions and the client form components. */
-export type Field = "name" | "email" | "password" | "confirmPassword" | "intent";
+export type Field = "name" | "email" | "password" | "confirmPassword" | "intent" | "code";
 
 export type FormState = {
   status: "idle" | "error" | "success";
@@ -28,3 +28,9 @@ export const PENDING_EMAIL_COOKIE = "tb_pending_email";
 /** Password policy, shared by the server config and the form hints so they cannot drift. */
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 128;
+
+/** One-time codes sent by email (confirming an account, resetting a password). */
+export const CODE_LENGTH = 6;
+export const CODE_MINUTES = 10;
+/** Where the password-reset flow remembers the address between asking for a code and typing it. */
+export const RESET_EMAIL_COOKIE = "tb_reset_email";

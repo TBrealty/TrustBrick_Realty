@@ -11,6 +11,6 @@ import type { NextRequest } from "next/server";
  * app's internal address (0.0.0.0:3000), not the site's, so it mustn't be built from it.
  */
 export function GET(request: NextRequest) {
-  const target = request.nextUrl.searchParams.has("error") ? "/login?verify=expired" : "/account/profile?welcome=1";
+  const target = request.nextUrl.searchParams.has("error") ? "/login?verify=expired" : "/";
   return new Response(null, { status: 307, headers: { Location: target } });
 }

@@ -22,6 +22,11 @@ export const RULES = {
   resetRequestByIp: { max: 5, windowSeconds: 15 * 60 },
   resetRequestByEmail: { max: 3, windowSeconds: 15 * 60 },
   resetSubmitByIp: { max: 10, windowSeconds: 15 * 60 },
+  // One-time codes by email: a new code once a minute, a few an hour; and how often codes are tried
+  // (each code also dies after 5 wrong tries).
+  codeResendByEmail: { max: 1, windowSeconds: 60 },
+  codeSendByEmail: { max: 5, windowSeconds: 60 * 60 },
+  codeCheckByIp: { max: 20, windowSeconds: 15 * 60 },
   // Workspace and customer actions.
   reauthByUser: { max: 5, windowSeconds: 15 * 60 },
   inviteAcceptByIp: { max: 10, windowSeconds: 15 * 60 },

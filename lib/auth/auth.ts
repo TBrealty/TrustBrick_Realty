@@ -3,17 +3,17 @@ import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { bearer } from "better-auth/plugins";
+import { bearer, emailOTP } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { v7 as uuidv7 } from "uuid";
 import { db } from "@/lib/db";
 import { accounts, rateLimits, sessions, users, verifications } from "@/lib/db/schema/identity";
 import { sendEmail } from "@/lib/email/send";
-import { existingAccountMessage, resetPasswordMessage, verifyEmailMessage } from "@/lib/email/templates";
+import { existingAccountMessage, resetCodeMessage, verifyCodeMessage } from "@/lib/email/templates";
 import { env } from "@/lib/env";
 import { isAccountIntent } from "@/lib/intents";
 
-import { PASSWORD_MAX, PASSWORD_MIN } from "./form";
+import { CODE_LENGTH, CODE_MINUTES, PASSWORD_MAX, PASSWORD_MIN } from "./form";
 
 export { PASSWORD_MAX, PASSWORD_MIN };
 
@@ -32,6 +32,22 @@ export const auth = betterAuth({
   appName: "Trustbrick",
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
+
+  // Emails carry one-time codes, typed on the same page, never links (which open a new tab). These
+  // public endpoints aren't used and stay closed: logging in with only a code, changing email by
+  // code, and the link-based reset and confirmation requests. The site and the app call the
+  // ones they use from the server. /verify-email stays open for links sent before the switch.
+  disabledPaths: [
+    "/sign-in/email-otp",
+    "/email-otp/send-verification-otp",
+    "/email-otp/check-verification-otp",
+    "/email-otp/request-email-change",
+    "/email-otp/change-email",
+    "/forget-password/email-otp",
+    "/send-verification-email",
+    "/request-password-reset",
+    "/reset-password",
+  ],
 
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -60,24 +76,18 @@ export const auth = betterAuth({
     // Signing up never signs you in: the account is unusable until the email is confirmed.
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
-    resetPasswordTokenExpiresIn: 30 * 60,
-    sendResetPassword: async ({ user, url: resetUrl }) => {
-      dispatch(resetPasswordMessage(user.email, resetUrl));
-    },
     onExistingUserSignUp: async ({ user }) => {
       dispatch(existingAccountMessage(user.email, url("/login"), url("/forgot-password")));
     },
   },
 
   emailVerification: {
+    // A code is sent on sign-up, and again when someone logs in before confirming (with the right
+    // password). The email OTP plugin below sends codes in place of links.
     sendOnSignUp: true,
-    // Logging in unverified (with the right password) sends a fresh link.
     sendOnSignIn: true,
+    // The right code signs you in, in the same tab.
     autoSignInAfterVerification: true,
-    expiresIn: 24 * 60 * 60,
-    sendVerificationEmail: async ({ user, url: verifyUrl }) => {
-      dispatch(verifyEmailMessage(user.email, user.name, verifyUrl));
-    },
     // Someone who signed up as an agent: their application goes to the team now, not before.
     afterEmailVerification: async (user, request) => {
       const { submitHeldAgentSignup } = await import("@/lib/services/agents");
@@ -107,6 +117,9 @@ export const auth = betterAuth({
       "/request-password-reset": { window: 15 * 60, max: 5 },
       "/send-verification-email": { window: 15 * 60, max: 5 },
       "/reset-password": { window: 15 * 60, max: 10 },
+      "/email-otp/verify-email": { window: 15 * 60, max: 20 },
+      "/email-otp/request-password-reset": { window: 15 * 60, max: 5 },
+      "/email-otp/reset-password": { window: 15 * 60, max: 10 },
     },
   },
 
@@ -136,6 +149,20 @@ export const auth = betterAuth({
   },
 
   plugins: [
+    // One-time codes by email: confirming a new account and resetting a password. Stored hashed;
+    // 5 wrong tries and the code is spent, so it can't be guessed.
+    emailOTP({
+      otpLength: CODE_LENGTH,
+      expiresIn: CODE_MINUTES * 60,
+      allowedAttempts: 5,
+      storeOTP: "hashed",
+      overrideDefaultEmailVerification: true,
+      sendVerificationOTP: async ({ email, otp, type }) => {
+        if (type === "email-verification") dispatch(verifyCodeMessage(email, otp, CODE_MINUTES));
+        else if (type === "forget-password") dispatch(resetCodeMessage(email, otp, CODE_MINUTES));
+        // Sign-in and change-email codes aren't used.
+      },
+    }),
     // The mobile app sends its session token as `Authorization: Bearer …` instead of a cookie.
     // It's the same session (same table, expiry and revocation), so every check applies.
     bearer(),

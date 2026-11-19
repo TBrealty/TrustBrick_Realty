@@ -1,10 +1,9 @@
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { ApiResponse, apiRoute, rateLimit, readJson } from "@/lib/api/http";
 import { authErrorCode } from "@/lib/api/auth-errors";
+import { sessionResponse } from "@/lib/api/session-response";
 import { auth } from "@/lib/auth/auth";
 import { RULES } from "@/lib/auth/rate-limit";
-import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 
 const schema = z.object({
@@ -26,13 +25,14 @@ export const POST = apiRoute("v1.auth.sign_in", { auth: "public" }, async ({ req
   ]);
   let signedIn: Awaited<ReturnType<typeof auth.api.signInEmail>>;
   try {
-    signedIn = await auth.api.signInEmail({ body: { email, password, rememberMe: true, callbackURL: "/welcome" }, headers: request.headers });
+    signedIn = await auth.api.signInEmail({ body: { email, password, rememberMe: true }, headers: request.headers });
   } catch (error) {
     const code = authErrorCode(error);
     if (code === "INVALID_EMAIL_OR_PASSWORD") throw new AppError("UNAUTHORIZED", "That email and password do not match.");
     if (code === "EMAIL_NOT_VERIFIED") {
-      // Only reachable with the right password, so it tells a guesser nothing.
-      return new ApiResponse({ error: { code: "FORBIDDEN", reason: "EMAIL_NOT_VERIFIED", message: "Please confirm your email first. We've just sent you a fresh link." } }, 403);
+      // Only reachable with the right password, so it tells a guesser nothing. A fresh code is on its
+      // way: POST it to /auth/verify-email, which signs them in.
+      return new ApiResponse({ error: { code: "FORBIDDEN", reason: "EMAIL_NOT_VERIFIED", message: "Please confirm your email first. We've just sent you a new code." } }, 403);
     }
     if (code === "ACCOUNT_SUSPENDED") {
       return new ApiResponse({ error: { code: "FORBIDDEN", reason: "ACCOUNT_SUSPENDED", message: "This account is suspended. If you think this is a mistake, contact Trustbrick support." } }, 403);
@@ -40,12 +40,6 @@ export const POST = apiRoute("v1.auth.sign_in", { auth: "public" }, async ({ req
     if (code === "TOO_MANY_REQUESTS") throw new AppError("RATE_LIMITED");
     throw error;
   }
-  const { rows } = await db.execute(sql`
-    SELECT s.expires_at, u.reference_id FROM identity.sessions s JOIN identity.users u ON u.id = s.user_id WHERE s.token = ${signedIn.token}`);
-  const r = rows[0] as { expires_at: string; reference_id: string };
-  return {
-    token: signedIn.token,
-    expiresAt: new Date(r.expires_at).toISOString(),
-    user: { referenceId: r.reference_id, name: signedIn.user.name, email: signedIn.user.email },
-  };
+  return sessionResponse(signedIn.token, signedIn.user);
 });
+

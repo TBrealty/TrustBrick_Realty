@@ -333,7 +333,9 @@ describe("the tenancy", () => {
     });
 
     it("holding, then recording it paid with the bank's reference", async () => {
-      const [s] = await listSettlements(ops, "ready");
+      // This landlord's own (other test files leave settlements of their own).
+      const lp = await one<{ reference_id: string }>(sql`SELECT reference_id FROM rent.landlord_profiles WHERE user_id = ${landlordUser.id}`);
+      const s =(await listSettlements(ops, "ready")).find((x) => x.landlordReferenceId === lp.reference_id)!;
       await holdSettlement(ops, s.referenceId, true, "The tenant says they paid twice; checking.", ctx);
       expect(await code(markSettlementPaid(ops, s.referenceId, { utr: "UTIBN12345678" }, ctx))).toBe("CONFLICT");
       await holdSettlement(ops, s.referenceId, false, null, ctx);

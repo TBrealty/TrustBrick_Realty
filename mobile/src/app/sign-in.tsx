@@ -1,4 +1,4 @@
-import { Link, router } from "expo-router";
+import { type Href, Link, router } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { ApiError } from "@/api/client";
@@ -23,6 +23,11 @@ export default function SignIn() {
       if (router.canGoBack()) router.back();
       else router.replace("/");
     } catch (e) {
+      // Not confirmed yet: a new code is on its way; type it on the next screen.
+      if (e instanceof ApiError && e.reason === "EMAIL_NOT_VERIFIED") {
+        router.push(`/verify-email?email=${encodeURIComponent(email.trim())}&resent=1` as Href);
+        return;
+      }
       setError(e instanceof ApiError ? e : new ApiError(0, "INTERNAL_ERROR", "Something went wrong. Please try again."));
     } finally {
       setBusy(false);

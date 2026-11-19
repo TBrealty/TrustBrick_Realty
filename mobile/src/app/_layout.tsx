@@ -77,6 +77,7 @@ export default function RootLayout() {
             <Stack.Screen name="filters" options={{ presentation: "formSheet", sheetAllowedDetents: [0.85, 1], sheetCornerRadius: 28 }} />
             <Stack.Screen name="sign-in" options={{ title: "Sign in", presentation: "modal" }} />
             <Stack.Screen name="sign-up" options={{ title: "Create an account", presentation: "modal" }} />
+            <Stack.Screen name="verify-email" options={{ title: "Confirm your email", presentation: "modal" }} />
             <Stack.Screen name="forgot-password" options={{ title: "Reset your password", presentation: "modal" }} />
             <Stack.Screen name="plans" options={{ title: "Trustbrick Plus" }} />
             <Stack.Screen name="trips/index" options={{ title: "Your stays" }} />

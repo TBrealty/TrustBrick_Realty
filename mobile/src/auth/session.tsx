@@ -16,6 +16,8 @@ type Session = {
   /** The workspace partner mode acts in (a membership ID). */
   workspace: string | null;
   signIn: (email: string, password: string) => Promise<void>;
+  /** Confirms a new account's email with the emailed code, which signs in. */
+  confirmEmail: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => void;
   switchMode: (mode: Mode, workspace?: string | null) => Promise<void>;
@@ -76,9 +78,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const me = meQuery.data;
   const effectiveMode: Mode = mode === "partner" && me && !me.workspaces.some((w) => w.membershipId === workspace) ? "customer" : mode;
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const result = await api<SignInResult>("/auth/sign-in", { method: "POST", body: { email, password } });
+  const adopt = useCallback(
+    async (result: SignInResult) => {
       setSessionToken(result.token);
       await tokenStore.set(result.token);
       queryClient.clear();
@@ -87,6 +88,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     },
     [queryClient],
   );
+  const signIn = useCallback(
+    async (email: string, password: string) => adopt(await api<SignInResult>("/auth/sign-in", { method: "POST", body: { email, password } })),
+    [adopt],
+  );
+  const confirmEmail = useCallback(async (email: string, code: string) => adopt(await api<SignInResult>("/auth/verify-email", { method: "POST", body: { email, code } })), [adopt]);
 
   const signOut = useCallback(async () => {
     await unregisterPush();
@@ -105,8 +111,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo<Session>(
-    () => ({ status, me, mode: effectiveMode, workspace, signIn, signOut, switchMode, refreshMe: () => void meQuery.refetch() }),
-    [status, me, effectiveMode, workspace, signIn, signOut, switchMode, meQuery],
+    () => ({ status, me, mode: effectiveMode, workspace, signIn, confirmEmail, signOut, switchMode, refreshMe: () => void meQuery.refetch() }),
+    [status, me, effectiveMode, workspace, signIn, confirmEmail, signOut, switchMode, meQuery],
   );
   // Screens wait for the saved session (a quick read), so nothing loads signed-out by mistake.
   return <SessionContext.Provider value={value}>{status === "loading" ? null : children}</SessionContext.Provider>;

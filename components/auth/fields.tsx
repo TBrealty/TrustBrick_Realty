@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { CODE_LENGTH, PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/form";
 import { ACCOUNT_INTENTS, INTENT_LABELS } from "@/lib/intents";
 
 const inputClass =
@@ -204,9 +205,12 @@ type PasswordFieldProps = {
   maxLength?: number;
   aside?: React.ReactNode;
   autoFocus?: boolean;
+  onValueChange?: (value: string) => void;
+  /** Controlled: kept after a failed submit (React clears uncontrolled fields). */
+  value?: string;
 };
 
-export function PasswordField({ label, name, autoComplete, error, hint, minLength, maxLength, aside, autoFocus }: PasswordFieldProps) {
+export function PasswordField({ label, name, autoComplete, error, hint, minLength, maxLength, aside, autoFocus, onValueChange, value }: PasswordFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   const capsId = `${id}-caps`;
@@ -238,6 +242,8 @@ export function PasswordField({ label, name, autoComplete, error, hint, minLengt
           onKeyUp={trackCaps}
           onKeyDown={trackCaps}
           onBlur={() => setCapsLock(false)}
+          value={value}
+          onChange={onValueChange ? (e) => onValueChange(e.target.value) : undefined}
           aria-invalid={error ? true : undefined}
           aria-describedby={[error || hint ? messageId : "", capsLock ? capsId : ""].filter(Boolean).join(" ") || undefined}
           className={`${inputClass} pr-20 ${error ? "border-brick" : "border-line-light"}`}
@@ -260,6 +266,39 @@ export function PasswordField({ label, name, autoComplete, error, hint, minLengt
       )}
       <FieldMessage id={messageId} error={error} hint={hint} />
     </div>
+  );
+}
+
+/**
+ * A new password typed twice. As the second is typed it says whether they match: no warning while
+ * it's still the start of the first, a green tick when they're the same, a warning as soon as they
+ * differ. The server checks again.
+ */
+export function NewPasswordPair({ errors, label = "Password", hint, autoFocus }: { errors: { password?: string; confirmPassword?: string }; label?: string; hint?: React.ReactNode; autoFocus?: boolean }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const typing = confirm.length > 0 && confirm.length < password.length && password.startsWith(confirm);
+  const live = !confirm || typing ? null : confirm === password ? "match" : "differ";
+  return (
+    <>
+      <PasswordField label={label} name="password" autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} error={errors.password} hint={hint} autoFocus={autoFocus} value={password} onValueChange={setPassword} />
+      <div>
+        <PasswordField
+          label={`Re-enter ${label.toLowerCase()}`}
+          name="confirmPassword"
+          autoComplete="new-password"
+          maxLength={PASSWORD_MAX}
+          error={live === "differ" ? "The passwords don't match." : live === "match" ? undefined : errors.confirmPassword}
+          value={confirm}
+          onValueChange={setConfirm}
+        />
+        {live === "match" && (
+          <p role="status" className="mt-2 text-[0.8125rem] font-medium text-sage">
+            ✓ The passwords match.
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -327,6 +366,40 @@ export function FormAlert({ tone, children }: { tone: "error" | "success" | "inf
   return (
     <div role={tone === "error" ? "alert" : "status"} className={`border-l-2 px-4 py-3 text-[0.9375rem] leading-relaxed ${styles}`}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * The one-time code from an email: one large box, digits only (spaces and dashes pasted in are
+ * dropped), and phones offer to fill it from the message (autocomplete="one-time-code").
+ */
+export function CodeField({ error, autoFocus }: { error?: string; autoFocus?: boolean }) {
+  const id = useId();
+  const messageId = `${id}-message`;
+  const [value, setValue] = useState("");
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-[0.8125rem] font-medium text-ink">
+        {CODE_LENGTH}-digit code
+      </label>
+      <input
+        id={id}
+        name="code"
+        value={value}
+        onChange={(e) => setValue(e.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH))}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern={`[0-9]{${CODE_LENGTH}}`}
+        maxLength={CODE_LENGTH}
+        required
+        autoFocus={autoFocus}
+        placeholder={"•".repeat(CODE_LENGTH)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? messageId : undefined}
+        className={`${inputClass} h-16 text-center font-mono text-[1.75rem] tracking-[0.5em] ${error ? "border-brick" : "border-line-light"}`}
+      />
+      <FieldMessage id={messageId} error={error} />
     </div>
   );
 }

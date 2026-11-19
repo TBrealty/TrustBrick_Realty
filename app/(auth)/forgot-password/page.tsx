@@ -16,7 +16,7 @@ export default function ForgotPasswordPage() {
           </>
         }
       >
-        Enter the email you signed up with and we will send you a link to choose a new one. Remembered it?{" "}
+        Enter the email you signed up with and we will send you a code to choose a new password, on the next page. Remembered it?{" "}
         <Link href="/login" className="link-rule font-medium text-ink">
           Log in
         </Link>
